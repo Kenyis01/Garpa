@@ -1,66 +1,57 @@
-# My G garpa App (Expo + Supabase)
+# 💸 Garpa (Expo + Supabase)
 
-Clon simplificado de G garpa construido con **Expo**, **expo-router** y **Supabase**.
+Construido para gestionar gastos compartidos entre amigos y grupos. Esta aplicación utiliza un sistema de navegación basado en archivos y una arquitectura de servicios desacoplada para garantizar escalabilidad y facilidad de mantenimiento.
 
-## Estructura de carpetas
+## 🚀 Tecnologías Principales
 
-- `app/`: pantallas y navegación (file-based routing de expo-router).
-- `components/`: componentes reutilizables de UI.
-- `constants/`: constantes globales (colores, etc.).
-- `contexts/`:
-  - `AuthContext.tsx`: contexto de autenticación (sesión de Supabase).
-  - `index.ts`: re-exporta `AuthProvider` y `useAuthContext`.
-- `hooks/`:
-  - `useAuth.ts`: hook para consumir el contexto de auth.
-  - `index.ts`: re-exporta hooks.
-- `lib/`:
-  - `env.ts`: lectura de variables de entorno (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`).
-  - `supabase.ts`: cliente de Supabase tipado.
-  - `index.ts`: re-exporta `supabase` y `env`.
-- `services/`:
-  - `groups.ts`: funciones para trabajar con la tabla `groups`.
-  - `expenses.ts`: funciones para la tabla `expenses`.
-  - `index.ts`: re-exporta servicios.
-- `types/`:
-  - `database.ts`: tipos de dominio y schema de Supabase.
-  - `index.ts`: re-exporta tipos.
+- **Framework:** [Expo](https://expo.dev/) (Managed Workflow)
+- **Navegación:** [Expo Router](https://docs.expo.dev/router/introduction/) (v3)
+- **Base de Datos & Auth:** [Supabase](https://supabase.com/)
+- **Lenguaje:** TypeScript
+- **Estado Global:** React Context API
 
-## Conexión a la base de datos (Supabase)
+---
 
-1. **Variables de entorno**
+## 📂 Estructura de Carpetas
 
-   En el archivo `.env` (no se sube a git) define:
+- **`app/`**: Pantallas y lógica de navegación (File-based routing).
+  - `(tabs)/`: Contiene la barra de navegación inferior (Amigos, Grupos, Actividad, Cuenta).
+  - `(auth)/`: Flujos de inicio de sesión y registro.
+  - `add-friends.tsx`, `add-expense.tsx`: Pantallas raíz que actúan como modales de pantalla completa.
+- **`components/`**: Componentes reutilizables.
+  - `ui/`: Componentes atómicos (Botones, Wrappers) sin lógica de negocio.
+  - `AddExpenseModal.tsx`, etc.: Componentes con lógica específica de la app.
+- **`constants/`**: Tokens de diseño como la paleta de colores global (`Colors.ts`).
+- **`contexts/`**: Estado global de la aplicación.
+  - `AuthContext.tsx`: Manejo de sesión de Supabase.
+  - `FriendsContext.tsx`: Manejo de la lista de amigos y balances.
+- **`hooks/`**: Hooks personalizados (ej. `useAuth`) para consumir contextos de forma simplificada.
+- **`lib/`**: Configuración de clientes externos. Destaca `supabaseClient.ts` con soporte para Web y Mobile.
+- **`services/`**: Capa de abstracción de datos para interactuar con las tablas de Supabase (`expenses.ts`, `groups.ts`).
+- **`types/`**: Definiciones e interfaces de TypeScript para el dominio y el esquema de la DB.
 
-   ```env
-   EXPO_PUBLIC_SUPABASE_URL=https://TU-PROJECT.supabase.co
-   EXPO_PUBLIC_SUPABASE_ANON_KEY=TU_ANON_KEY
-   ```
+---
 
-2. **Cliente de Supabase**
+## ⚙️ Conexión a la Base de Datos (Supabase)
 
-   El cliente está en `lib/supabase.ts` y se importa desde cualquier parte así:
+### 1. Variables de Entorno
+Crea un archivo `.env` en la raíz del proyecto (este archivo está ignorado en Git) y define las siguientes variables:
 
-   ```ts
-   import { supabase } from '@/lib';
+```env
+EXPO_PUBLIC_SUPABASE_URL=[https://TU-PROJECT.supabase.co](https://TU-PROJECT.supabase.co)
+EXPO_PUBLIC_SUPABASE_ANON_KEY=TU_ANON_KEY
 
-   const { data, error } = await supabase.from('groups').select('*');
-   ```
+### 2. Cliente de Supabase
+El cliente se encuentra en lib/supabaseClient.ts y puede ser importado en cualquier parte de la aplicación:
 
-3. **Autenticación**
+import { supabaseClient } from '@/lib/supabaseClient';
 
-   - El `AuthProvider` envuelve toda la app en `app/_layout.tsx`.
-   - Usa el hook `useAuth` para acceder a la sesión:
+// Ejemplo de uso:
+const { data, error } = await supabaseClient.from('groups').select('*');
 
-   ```ts
-   import { useAuth } from '@/hooks';
+### 3. Autenticación
+El AuthProvider envuelve toda la aplicación en el archivo raíz app/_layout.tsx. Para acceder a la sesión, utiliza el hook personalizado:
 
-   const { user, session, loading, signInWithOtp, signOut } = useAuth();
-   ```
+import { useAuth } from '@/hooks';
 
-## Scripts
-
-- `npm start`: inicia el proyecto en Expo.
-- `npm run android`: corre en Android.
-- `npm run ios`: corre en iOS.
-- `npm run web`: corre en web.
-
+const { user, session, loading, signOut } = useAuth();

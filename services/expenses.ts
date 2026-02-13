@@ -1,9 +1,10 @@
-import { supabase } from '@/lib';
+import { supabaseClient } from '@/lib/supabaseClient'; // <--- CORREGIDO: Importamos el nombre real
 import type { Expense } from '@/types';
 
 /** Obtiene todos los gastos de un grupo. */
 export async function getGroupExpenses(groupId: string) {
-  const { data, error } = await supabase
+  // Usamos supabaseClient en lugar de supabase
+  const { data, error } = await supabaseClient 
     .from('expenses')
     .select('*')
     .eq('group_id', groupId)
@@ -13,21 +14,26 @@ export async function getGroupExpenses(groupId: string) {
   return data as Expense[];
 }
 
-type CreateExpenseInput = Pick<Expense, 'group_id' | 'description' | 'amount' | 'currency' | 'split_type'> & {
-  created_by: string;
-};
+// Definimos el input alineado con tu base de datos
+type CreateExpenseInput = Pick<Expense, 'group_id' | 'description' | 'amount' | 'currency_code' | 'payer_id' | 'category'>;
 
 /** Crea un nuevo gasto en un grupo. */
 export async function createExpense(input: CreateExpenseInput) {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseClient
     .from('expenses')
     .insert({
       group_id: input.group_id,
       description: input.description,
       amount: input.amount,
-      currency: input.currency,
-      split_type: input.split_type,
-      created_by: input.created_by,
+      currency_code: input.currency_code,
+      payer_id: input.payer_id,
+      category: input.category,
+      date: new Date().toISOString(), // Fecha automática
+      
+      // --- CAMPOS OBLIGATORIOS POR TYPESCRIPT (aunque sean null en DB) ---
+      receipt_url: null, 
+      notes: null 
+      // -------------------------------------------------------------------
     })
     .select()
     .single();
@@ -35,4 +41,3 @@ export async function createExpense(input: CreateExpenseInput) {
   if (error) throw error;
   return data as Expense;
 }
-
