@@ -1,0 +1,11 @@
+Actualizá la interfaz Profile para incluir los nuevos campos que agregué a la base de datos:
+
+phone: string
+
+currency: string (default 'USD')
+
+timezone: string
+
+language: string
+
+privacy_searchable: boolean (default true) Asegurate de que coincidan con los tipos de Supabase.

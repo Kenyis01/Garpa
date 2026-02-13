@@ -1,59 +1,55 @@
-import React from 'react';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Link, Tabs } from 'expo-router';
-import { Pressable } from 'react-native';
-
 import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
-import { useClientOnlyValue } from '@/components/useClientOnlyValue';
-
-// You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
-function TabBarIcon(props: {
-  name: React.ComponentProps<typeof FontAwesome>['name'];
-  color: string;
-}) {
-  return <FontAwesome size={28} style={{ marginBottom: -3 }} {...props} />;
-}
+import { Ionicons } from '@expo/vector-icons';
+import { Tabs } from 'expo-router';
+import React from 'react';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        // Disable the static render of the header on web
-        // to prevent a hydration error in React Navigation v6.
-        headerShown: useClientOnlyValue(false, true),
+        tabBarActiveTintColor: Colors.brand.primary,
+        tabBarStyle: { paddingBottom: 5, paddingTop: 5, height: 60 },
+        headerShown: false, // Ocultamos el header nativo de las tabs
       }}>
+      
+      {/* 1. Pestaña Amigos (Apunta a friends.tsx) */}
       <Tabs.Screen
-        name="index"
+        name="friends"
         options={{
-          title: 'Tab One',
-          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
-          headerRight: () => (
-            <Link href="/modal" asChild>
-              <Pressable>
-                {({ pressed }) => (
-                  <FontAwesome
-                    name="info-circle"
-                    size={25}
-                    color={Colors[colorScheme ?? 'light'].text}
-                    style={{ marginRight: 15, opacity: pressed ? 0.5 : 1 }}
-                  />
-                )}
-              </Pressable>
-            </Link>
-          ),
+          title: 'Friends',
+          tabBarIcon: ({ color }) => <Ionicons name="person-outline" size={24} color={color} />,
         }}
       />
+
+      {/* 2. Pestaña Grupos (Apunta a groups.tsx) */}
       <Tabs.Screen
-        name="two"
+        name="groups"
         options={{
-          title: 'Tab Two',
-          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
+          title: 'Groups',
+          tabBarIcon: ({ color }) => <Ionicons name="people-outline" size={24} color={color} />,
         }}
       />
+
+      {/* 3. Pestaña Actividad (Apunta a activity.tsx) */}
+      <Tabs.Screen
+        name="activity"
+        options={{
+          title: 'Activity',
+          tabBarIcon: ({ color }) => <Ionicons name="pulse-outline" size={24} color={color} />,
+        }}
+      />
+
+      {/* 4. Pestaña Cuenta (Apunta a account.tsx) */}
+      <Tabs.Screen
+        name="account"
+        options={{
+          title: 'Account',
+          tabBarIcon: ({ color }) => <Ionicons name="settings-outline" size={24} color={color} />,
+        }}
+      />
+
+      {/* Ocultamos archivos que no son pestañas (como index.tsx si no lo usas) */}
+      <Tabs.Screen name="index" options={{ href: null }} />
     </Tabs>
   );
 }

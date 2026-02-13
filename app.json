@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "my-splitwise-app",
-    "slug": "my-splitwise-app",
+    "name": "my-G garpa-app",
+    "slug": "my-G garpa-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "mysplitwiseapp",
+    "scheme": "myG garpaapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -14,7 +14,10 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSContactsUsageDescription": "This app needs access to your contacts to help you add friends to G garpa."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -22,7 +25,10 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "READ_CONTACTS"
+      ]
     },
     "web": {
       "bundler": "metro",
