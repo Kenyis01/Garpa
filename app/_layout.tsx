@@ -13,7 +13,7 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         
         {/* Login */}
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
 
         {/* --- MODALES (Entran desde abajo) --- */}
         <Stack.Screen 
