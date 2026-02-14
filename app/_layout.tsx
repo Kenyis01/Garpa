@@ -1,12 +1,14 @@
+import { AuthProvider } from '@/contexts/AuthContext';
 import { FriendsProvider } from '@/contexts/FriendsContext';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 export default function RootLayout() {
   return (
-    <FriendsProvider>
-      <StatusBar style="dark" />
-      <Stack>
+    <AuthProvider>
+      <FriendsProvider>
+        <StatusBar style="dark" />
+        <Stack>
         {/* Las Pestañas (Tabs) */}
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         
@@ -46,7 +48,8 @@ export default function RootLayout() {
         />
         
         <Stack.Screen name="+not-found" />
-      </Stack>
-    </FriendsProvider>
+        </Stack>
+      </FriendsProvider>
+    </AuthProvider>
   );
 }

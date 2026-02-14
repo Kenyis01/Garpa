@@ -38,13 +38,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setLoading(false);
       });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-    });
+    let subscription: { subscription: { unsubscribe: () => void } } | null = null;
+    try {
+      const result = supabase.auth.onAuthStateChange((_event, newSession) => {
+        setSession(newSession);
+      });
+      subscription = result.data;
+    } catch {
+      // Supabase may not be configured yet
+    }
 
     return () => {
       mounted = false;
-      subscription.subscription.unsubscribe();
+      subscription?.subscription.unsubscribe();
     };
   }, []);
 

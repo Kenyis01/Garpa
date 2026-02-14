@@ -48,8 +48,9 @@ export default function TabLayout() {
         }}
       />
 
-      {/* Ocultamos archivos que no son pestañas (como index.tsx si no lo usas) */}
+      {/* Ocultamos archivos que no son pestañas */}
       <Tabs.Screen name="index" options={{ href: null }} />
+      <Tabs.Screen name="add-expense-placeholder" options={{ href: null }} />
     </Tabs>
   );
 }
