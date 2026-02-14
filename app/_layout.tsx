@@ -1,9 +1,11 @@
+import { AuthProvider } from '@/contexts/AuthContext';
 import { FriendsProvider } from '@/contexts/FriendsContext';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 export default function RootLayout() {
   return (
+    <AuthProvider>
     <FriendsProvider>
       <StatusBar style="dark" />
       <Stack>
@@ -48,5 +50,6 @@ export default function RootLayout() {
         <Stack.Screen name="+not-found" />
       </Stack>
     </FriendsProvider>
+    </AuthProvider>
   );
 }

@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "my-G garpa-app",
-    "slug": "my-G garpa-app",
+    "name": "my-garpa-app",
+    "slug": "my-garpa-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myG garpaapp",
+    "scheme": "mygarpaapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSContactsUsageDescription": "This app needs access to your contacts to help you add friends to G garpa."
+        "NSContactsUsageDescription": "This app needs access to your contacts to help you add friends to Garpa."
       }
     },
     "android": {

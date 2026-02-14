@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import 'react-native-url-polyfill/auto';
 import { Database } from '../types/database'; // <--- IMPORTANTE: Importamos tu mapa
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
 // Acá le pasamos <Database> al createClient para que sepa qué tablas existen
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
