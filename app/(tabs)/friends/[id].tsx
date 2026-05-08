@@ -2,14 +2,17 @@ import { useAuth } from '@/hooks/useAuth';
 import {
   calcBalance,
   getExpensesWithFriend,
+  removeFriendship,
 } from '@/services/friends';
+import { rowsToCsv, shareCsv } from '@/utils/exportCsv';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
+  Alert,
   RefreshControl,
+  SectionList,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -49,6 +52,17 @@ export default function FriendDetailScreen() {
   const [balance, setBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const sections = React.useMemo(() => {
+    const map: Record<string, ExpenseItem[]> = {};
+    for (const e of expenses) {
+      const d = e.date ? new Date(e.date) : new Date(0);
+      const key = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      if (!map[key]) map[key] = [];
+      map[key].push(e);
+    }
+    return Object.entries(map).map(([title, data]) => ({ title, data }));
+  }, [expenses]);
 
   const load = useCallback(async () => {
     if (!user || !id) return;
@@ -91,7 +105,10 @@ export default function FriendDetailScreen() {
       : '';
 
     return (
-      <View style={styles.expenseRow}>
+      <TouchableOpacity
+        style={styles.expenseRow}
+        onPress={() => router.push({ pathname: '/expense/[id]', params: { id: item.id } })}
+      >
         <View style={styles.expenseIcon}>
           <MaterialCommunityIcons name={icon as any} size={22} color="#6b7280" />
         </View>
@@ -105,7 +122,7 @@ export default function FriendDetailScreen() {
             {iPaid ? `you lent $${item.friendShare.toFixed(2)}` : `you borrowed $${item.myShare.toFixed(2)}`}
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   }
 
@@ -116,17 +133,73 @@ export default function FriendDetailScreen() {
           title: name ?? 'Friend',
           headerBackTitle: 'Friends',
           headerRight: () => (
-            <TouchableOpacity
-              onPress={() =>
-                router.push({
-                  pathname: '/add-expense',
-                  params: { friendId: id, friendName: name },
-                })
-              }
-              style={{ marginRight: 4 }}
-            >
-              <Ionicons name="add" size={28} color="#5BC5A7" />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <TouchableOpacity
+                onPress={() =>
+                  Alert.alert(name ?? 'Friend', 'Options', [
+                    {
+                      text: 'Export as CSV',
+                      onPress: async () => {
+                        try {
+                          const csv = rowsToCsv(
+                            ['Date', 'Description', 'Amount', 'Paid by', 'Your share'],
+                            expenses.map((e) => [
+                              e.date ?? '',
+                              e.description,
+                              e.amount.toFixed(2),
+                              e.payer_id === user?.id ? 'You' : (name ?? 'Friend'),
+                              e.myShare.toFixed(2),
+                            ])
+                          );
+                          await shareCsv(`expenses-${name ?? 'friend'}.csv`, csv);
+                        } catch (err: any) {
+                          Alert.alert('Export failed', err.message);
+                        }
+                      },
+                    },
+                    {
+                      text: 'Remove friend',
+                      style: 'destructive',
+                      onPress: () =>
+                        Alert.alert(
+                          'Remove friend',
+                          `Are you sure you want to remove ${name} as a friend?`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Remove',
+                              style: 'destructive',
+                              onPress: async () => {
+                                try {
+                                  await removeFriendship(friendshipId!);
+                                  router.back();
+                                } catch (e: any) {
+                                  Alert.alert('Error', e.message);
+                                }
+                              },
+                            },
+                          ]
+                        ),
+                    },
+                    { text: 'Cancel', style: 'cancel' },
+                  ])
+                }
+                style={{ padding: 8 }}
+              >
+                <Ionicons name="ellipsis-horizontal" size={22} color="#555" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: '/add-expense',
+                    params: { friendId: id, friendName: name },
+                  })
+                }
+                style={{ marginRight: 4 }}
+              >
+                <Ionicons name="add" size={28} color="#5BC5A7" />
+              </TouchableOpacity>
+            </View>
           ),
         }}
       />
@@ -165,10 +238,15 @@ export default function FriendDetailScreen() {
             <ActivityIndicator size="large" color="#5BC5A7" />
           </View>
         ) : (
-          <FlatList
-            data={expenses}
+          <SectionList
+            sections={sections}
             renderItem={renderExpense}
             keyExtractor={(item) => item.id}
+            renderSectionHeader={({ section: { title } }) => (
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionHeaderText}>{title}</Text>
+              </View>
+            )}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
@@ -243,6 +321,14 @@ const styles = StyleSheet.create({
   expenseTotal: { fontSize: 15, fontWeight: '600', color: '#111827', marginBottom: 3 },
   expenseShare: { fontSize: 12 },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: '#e5e7eb', marginLeft: 68 },
+  sectionHeader: {
+    backgroundColor: '#f9fafb',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e7eb',
+  },
+  sectionHeaderText: { fontSize: 13, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.3 },
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
   emptyTitle: { fontSize: 20, fontWeight: '700', color: '#111827', marginTop: 20, marginBottom: 8 },
   emptySubtitle: { fontSize: 15, color: '#6b7280', textAlign: 'center', lineHeight: 22 },

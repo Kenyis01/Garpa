@@ -18,23 +18,94 @@ import {
   View,
 } from 'react-native';
 
-type Category = {
-  key: string;
-  label: string;
-  icon: string;
-};
+type Subcategory = { key: string; label: string };
+type CategoryGroup = { key: string; label: string; icon: string; subs: Subcategory[] };
 
-const CATEGORIES: Category[] = [
-  { key: 'food_drink', label: 'Food & Drink', icon: 'food-fork-drink' },
-  { key: 'home', label: 'Home', icon: 'home' },
-  { key: 'transportation', label: 'Transport', icon: 'car' },
-  { key: 'entertainment', label: 'Entertainment', icon: 'movie-open' },
-  { key: 'utilities', label: 'Utilities', icon: 'lightning-bolt' },
-  { key: 'life', label: 'Life', icon: 'shopping' },
-  { key: 'uncategorized', label: 'Other', icon: 'receipt' },
+const CATEGORY_GROUPS: CategoryGroup[] = [
+  {
+    key: 'food_drink', label: 'Food & Drink', icon: 'food-fork-drink',
+    subs: [
+      { key: 'restaurants', label: 'Dining out' },
+      { key: 'groceries', label: 'Groceries' },
+      { key: 'alcohol', label: 'Liquor / Alcohol' },
+      { key: 'coffee', label: 'Coffee' },
+    ],
+  },
+  {
+    key: 'home', label: 'Home', icon: 'home',
+    subs: [
+      { key: 'rent', label: 'Rent' },
+      { key: 'mortgage', label: 'Mortgage' },
+      { key: 'utilities', label: 'Utilities' },
+      { key: 'cleaning', label: 'Cleaning' },
+      { key: 'furniture', label: 'Furniture' },
+      { key: 'maintenance', label: 'Maintenance' },
+    ],
+  },
+  {
+    key: 'transportation', label: 'Transportation', icon: 'car',
+    subs: [
+      { key: 'gas', label: 'Gas / Fuel' },
+      { key: 'parking', label: 'Parking' },
+      { key: 'taxi', label: 'Taxi / Rideshare' },
+      { key: 'transit', label: 'Bus / Train' },
+      { key: 'flights', label: 'Flights' },
+      { key: 'tolls', label: 'Tolls' },
+    ],
+  },
+  {
+    key: 'entertainment', label: 'Entertainment', icon: 'ticket',
+    subs: [
+      { key: 'movies', label: 'Movies / Theatre' },
+      { key: 'music', label: 'Music' },
+      { key: 'sports', label: 'Sports / Outdoors' },
+      { key: 'games', label: 'Games' },
+    ],
+  },
+  {
+    key: 'life', label: 'Life', icon: 'shopping',
+    subs: [
+      { key: 'clothing', label: 'Clothing' },
+      { key: 'electronics', label: 'Electronics' },
+      { key: 'gifts', label: 'Gifts' },
+      { key: 'medical', label: 'Medical / Healthcare' },
+      { key: 'gym', label: 'Gym / Fitness' },
+      { key: 'education', label: 'Education' },
+    ],
+  },
+  {
+    key: 'travel', label: 'Travel', icon: 'airplane',
+    subs: [
+      { key: 'hotel', label: 'Hotel / Lodging' },
+      { key: 'rental_car', label: 'Rental car' },
+      { key: 'vacation', label: 'Vacation' },
+    ],
+  },
+  {
+    key: 'uncategorized', label: 'Uncategorized', icon: 'dots-horizontal',
+    subs: [{ key: 'general', label: 'General' }],
+  },
 ];
 
+function findCategory(key: string): { group: CategoryGroup; sub?: Subcategory } {
+  for (const g of CATEGORY_GROUPS) {
+    if (g.key === key) return { group: g };
+    const sub = g.subs.find((s) => s.key === key);
+    if (sub) return { group: g, sub };
+  }
+  return { group: CATEGORY_GROUPS[CATEGORY_GROUPS.length - 1] };
+}
+
 type SplitType = 'equal' | 'full_payer' | 'full_friend';
+type RecurrenceInterval = 'never' | 'weekly' | 'fortnightly' | 'monthly' | 'yearly';
+
+const RECURRENCE_LABELS: Record<RecurrenceInterval, string> = {
+  never: 'Does not repeat',
+  weekly: 'Weekly',
+  fortnightly: 'Every 2 weeks',
+  monthly: 'Monthly',
+  yearly: 'Yearly',
+};
 
 export default function AddExpenseScreen() {
   const { friendId, friendName, groupId } = useLocalSearchParams<{
@@ -47,16 +118,21 @@ export default function AddExpenseScreen() {
 
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState('uncategorized');
+  const [category, setCategory] = useState('general');
   const [date, setDate] = useState(new Date());
   const [splitType, setSplitType] = useState<SplitType>('equal');
+  const [notes, setNotes] = useState('');
+  const [recurrence, setRecurrence] = useState<RecurrenceInterval>('never');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showRecurrenceModal, setShowRecurrenceModal] = useState(false);
+  const [selectedParent, setSelectedParent] = useState<CategoryGroup | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const descInputRef = useRef<TextInput>(null);
 
-  const selectedCategory = CATEGORIES.find((c) => c.key === category) ?? CATEGORIES[6];
+  const { group: selectedGroup, sub: selectedSub } = findCategory(category);
+  const categoryLabel = selectedSub?.label ?? selectedGroup.label;
   const numericAmount = parseFloat(amount) || 0;
 
   const splitLabels: Record<SplitType, string> = {
@@ -82,7 +158,6 @@ export default function AddExpenseScreen() {
 
     setSaving(true);
     try {
-      // Determine payer and shares based on splitType
       let payerId = user.id;
       let myShare = numericAmount / 2;
       let friendShare = numericAmount / 2;
@@ -104,6 +179,10 @@ export default function AddExpenseScreen() {
         description: description.trim(),
         category,
         date: date.toISOString().split('T')[0],
+        notes: notes.trim() || undefined,
+        myShare,
+        friendShare,
+        recurrence: recurrence !== 'never' ? recurrence : undefined,
       });
 
       await refreshFriends();
@@ -182,9 +261,9 @@ export default function AddExpenseScreen() {
         {/* Options row */}
         <View style={styles.optionsRow}>
           {/* Category */}
-          <TouchableOpacity style={styles.optionBtn} onPress={() => setShowCategoryModal(true)}>
-            <MaterialCommunityIcons name={selectedCategory.icon as any} size={18} color="#555" />
-            <Text style={styles.optionBtnText}>{selectedCategory.label}</Text>
+          <TouchableOpacity style={styles.optionBtn} onPress={() => { setSelectedParent(null); setShowCategoryModal(true); }}>
+            <MaterialCommunityIcons name={selectedGroup.icon as any} size={18} color="#555" />
+            <Text style={styles.optionBtnText}>{categoryLabel}</Text>
           </TouchableOpacity>
 
           {/* Date */}
@@ -192,6 +271,14 @@ export default function AddExpenseScreen() {
             <Ionicons name="calendar-outline" size={18} color="#555" />
             <Text style={styles.optionBtnText}>
               {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Recurrence */}
+          <TouchableOpacity style={styles.optionBtn} onPress={() => setShowRecurrenceModal(true)}>
+            <Ionicons name="repeat" size={18} color={recurrence !== 'never' ? '#5BC5A7' : '#555'} />
+            <Text style={[styles.optionBtnText, recurrence !== 'never' && { color: '#5BC5A7' }]}>
+              {RECURRENCE_LABELS[recurrence]}
             </Text>
           </TouchableOpacity>
         </View>
@@ -231,29 +318,68 @@ export default function AddExpenseScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Notes */}
+        <View style={styles.inputRow}>
+          <MaterialCommunityIcons name="note-text-outline" size={24} color="#9ca3af" style={styles.inputIcon} />
+          <TextInput
+            style={styles.textInput}
+            placeholder="Add a note (optional)"
+            placeholderTextColor="#ccc"
+            value={notes}
+            onChangeText={setNotes}
+            returnKeyType="done"
+            multiline
+          />
+        </View>
       </ScrollView>
 
       {/* Category Modal */}
       <Modal visible={showCategoryModal} transparent animationType="slide">
         <Pressable style={styles.modalOverlay} onPress={() => setShowCategoryModal(false)}>
           <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Category</Text>
-            {CATEGORIES.map((cat) => (
-              <TouchableOpacity
-                key={cat.key}
-                style={styles.categoryRow}
-                onPress={() => {
-                  setCategory(cat.key);
-                  setShowCategoryModal(false);
-                }}
-              >
-                <MaterialCommunityIcons name={cat.icon as any} size={22} color="#555" style={{ width: 32 }} />
-                <Text style={[styles.categoryLabel, category === cat.key && { color: '#5BC5A7', fontWeight: '700' }]}>
-                  {cat.label}
-                </Text>
-                {category === cat.key && <Ionicons name="checkmark" size={18} color="#5BC5A7" />}
-              </TouchableOpacity>
-            ))}
+            {selectedParent ? (
+              <>
+                <TouchableOpacity onPress={() => setSelectedParent(null)} style={styles.backRow}>
+                  <Ionicons name="chevron-back" size={20} color="#5BC5A7" />
+                  <Text style={styles.backText}>{selectedParent.label}</Text>
+                </TouchableOpacity>
+                <Text style={styles.modalTitle}>{selectedParent.label}</Text>
+                {selectedParent.subs.map((sub) => (
+                  <TouchableOpacity
+                    key={sub.key}
+                    style={styles.categoryRow}
+                    onPress={() => {
+                      setCategory(sub.key);
+                      setShowCategoryModal(false);
+                      setSelectedParent(null);
+                    }}
+                  >
+                    <Text style={[styles.categoryLabel, category === sub.key && { color: '#5BC5A7', fontWeight: '700' }]}>
+                      {sub.label}
+                    </Text>
+                    {category === sub.key && <Ionicons name="checkmark" size={18} color="#5BC5A7" />}
+                  </TouchableOpacity>
+                ))}
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalTitle}>Category</Text>
+                {CATEGORY_GROUPS.map((grp) => (
+                  <TouchableOpacity
+                    key={grp.key}
+                    style={styles.categoryRow}
+                    onPress={() => setSelectedParent(grp)}
+                  >
+                    <MaterialCommunityIcons name={grp.icon as any} size={22} color="#555" style={{ width: 32 }} />
+                    <Text style={[styles.categoryLabel, selectedGroup.key === grp.key && { color: '#5BC5A7', fontWeight: '700' }]}>
+                      {grp.label}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={18} color="#ccc" />
+                  </TouchableOpacity>
+                ))}
+              </>
+            )}
           </View>
         </Pressable>
       </Modal>
@@ -271,6 +397,30 @@ export default function AddExpenseScreen() {
           maximumDate={new Date()}
         />
       )}
+
+      {/* Recurrence Modal */}
+      <Modal visible={showRecurrenceModal} transparent animationType="slide">
+        <Pressable style={styles.modalOverlay} onPress={() => setShowRecurrenceModal(false)}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Repeat</Text>
+            {(Object.keys(RECURRENCE_LABELS) as RecurrenceInterval[]).map((r) => (
+              <TouchableOpacity
+                key={r}
+                style={styles.categoryRow}
+                onPress={() => {
+                  setRecurrence(r);
+                  setShowRecurrenceModal(false);
+                }}
+              >
+                <Text style={[styles.categoryLabel, recurrence === r && { color: '#5BC5A7', fontWeight: '700' }]}>
+                  {RECURRENCE_LABELS[r]}
+                </Text>
+                {recurrence === r && <Ionicons name="checkmark" size={18} color="#5BC5A7" />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
     </>
   );
 }
@@ -379,4 +529,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   categoryLabel: { flex: 1, fontSize: 16, color: '#374151' },
+  backRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 4,
+  },
+  backText: { fontSize: 15, color: '#5BC5A7', fontWeight: '600' },
 });

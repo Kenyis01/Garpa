@@ -155,6 +155,11 @@ export default function AccountScreen() {
 
       <View style={styles.menuContainer}>
         <MenuItem
+          icon="bar-chart"
+          text="Spending charts"
+          onPress={() => router.push('/spending')}
+        />
+        <MenuItem
           icon="sliders"
           text="Preferences"
           onPress={() => router.push('/preferences')}

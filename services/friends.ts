@@ -182,6 +182,71 @@ export async function getExpensesWithFriend(userId: string, friendId: string) {
   });
 }
 
+export type ExpenseDetail = {
+  id: string;
+  description: string;
+  amount: number;
+  currency_code: string | null;
+  date: string | null;
+  category: string | null;
+  notes: string | null;
+  receipt_url: string | null;
+  payer_id: string;
+  group_id: string | null;
+  is_settlement: boolean;
+  splits: { user_id: string; amount: number; name: string; avatar_url: string | null }[];
+};
+
+/** Get full expense detail with participant splits and profiles. */
+export async function getExpenseDetail(expenseId: string): Promise<ExpenseDetail | null> {
+  const { data: expense } = await supabase
+    .from('expenses')
+    .select('*')
+    .eq('id', expenseId)
+    .single();
+
+  if (!expense) return null;
+
+  const { data: splits } = await supabase
+    .from('expense_splits')
+    .select('user_id, amount')
+    .eq('expense_id', expenseId);
+
+  const userIds = (splits ?? []).map((s) => s.user_id);
+  const { data: profiles } = userIds.length
+    ? await supabase.from('profiles').select('id, full_name, email, avatar_url').in('id', userIds)
+    : { data: [] };
+
+  return {
+    id: expense.id,
+    description: expense.description,
+    amount: expense.amount,
+    currency_code: expense.currency_code,
+    date: expense.date,
+    category: expense.category,
+    notes: expense.notes,
+    receipt_url: expense.receipt_url,
+    payer_id: expense.payer_id,
+    group_id: expense.group_id,
+    is_settlement: (expense as any).is_settlement ?? false,
+    splits: (splits ?? []).map((s) => {
+      const p = profiles?.find((pr) => pr.id === s.user_id);
+      return {
+        user_id: s.user_id,
+        amount: s.amount,
+        name: p?.full_name ?? p?.email ?? 'Unknown',
+        avatar_url: p?.avatar_url ?? null,
+      };
+    }),
+  };
+}
+
+/** Delete an expense and its splits. */
+export async function deleteExpense(expenseId: string): Promise<void> {
+  const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
+  if (error) throw error;
+}
+
 /** Record a settlement payment between two users. */
 export async function recordSettlement(params: {
   payerId: string;

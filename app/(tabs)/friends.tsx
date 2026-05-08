@@ -1,10 +1,11 @@
+import OverallBalanceBanner from '@/components/OverallBalanceBanner';
 import { ScreenWrapper } from '@/components/ui/ScreenWrapper';
 import Colors from '@/constants/Colors';
 import { useFriends } from '@/contexts/FriendsContext';
 import type { FriendWithBalance } from '@/services/friends';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router } from 'expo-router';
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -14,8 +15,17 @@ import {
   View,
 } from 'react-native';
 
+type Filter = 'all' | 'owe' | 'owed';
+
 export default function FriendsScreen() {
   const { friends, loading } = useFriends();
+  const [filter, setFilter] = useState<Filter>('all');
+
+  const filteredFriends = useMemo(() => {
+    if (filter === 'owe') return friends.filter((f) => f.balance < 0);
+    if (filter === 'owed') return friends.filter((f) => f.balance > 0);
+    return friends;
+  }, [friends, filter]);
 
   const renderFriend = ({ item }: { item: FriendWithBalance }) => (
     <TouchableOpacity
@@ -57,6 +67,22 @@ export default function FriendsScreen() {
         </TouchableOpacity>
       </View>
 
+      <OverallBalanceBanner />
+
+      <View style={styles.filterRow}>
+        {(['all', 'owed', 'owe'] as Filter[]).map((f) => (
+          <TouchableOpacity
+            key={f}
+            style={[styles.filterChip, filter === f && styles.filterChipActive]}
+            onPress={() => setFilter(f)}
+          >
+            <Text style={[styles.filterChipText, filter === f && styles.filterChipTextActive]}>
+              {f === 'all' ? 'All' : f === 'owed' ? 'You are owed' : 'You owe'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={Colors.brand.primary} />
@@ -69,9 +95,14 @@ export default function FriendsScreen() {
             <Text style={styles.bigButtonText}>Add friends</Text>
           </TouchableOpacity>
         </View>
+      ) : filteredFriends.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="checkmark-circle-outline" size={48} color="#ccc" />
+          <Text style={styles.emptyText}>No friends match this filter</Text>
+        </View>
       ) : (
         <FlatList
-          data={friends}
+          data={filteredFriends}
           renderItem={renderFriend}
           keyExtractor={(item) => item.friendshipId}
           contentContainerStyle={{ paddingBottom: 100 }}
@@ -114,6 +145,29 @@ const styles = StyleSheet.create({
   friendName: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
   settledText: { fontSize: 12, color: '#999' },
   balanceText: { fontSize: 12, fontWeight: '600' },
+  filterRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+  },
+  filterChipActive: {
+    backgroundColor: Colors.brand.primary,
+    borderColor: Colors.brand.primary,
+  },
+  filterChipText: { fontSize: 13, color: '#6b7280', fontWeight: '500' },
+  filterChipTextActive: { color: '#fff' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
   emptyText: { textAlign: 'center', color: '#666', marginTop: 20, marginBottom: 20 },

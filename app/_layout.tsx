@@ -42,6 +42,8 @@ function RootNavigator() {
         options={{ presentation: 'modal', headerShown: false }}
       />
       <Stack.Screen name="group/[id]" options={{ headerShown: true }} />
+      <Stack.Screen name="expense/[id]" options={{ headerShown: true }} />
+      <Stack.Screen name="spending" options={{ headerShown: true }} />
       <Stack.Screen name="preferences" options={{ headerShown: true }} />
       <Stack.Screen name="account/edit" options={{ headerShown: true }} />
       <Stack.Screen

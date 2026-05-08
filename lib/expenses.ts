@@ -7,11 +7,25 @@ export async function createExpenseBetweenFriends(params: {
   description: string;
   category?: string;
   date?: string;
+  notes?: string;
+  myShare?: number;
+  friendShare?: number;
+  recurrence?: string;
 }) {
-  const { payerId, friendId, amount, description, category, date } = params;
+  const {
+    payerId,
+    friendId,
+    amount,
+    description,
+    category,
+    date,
+    notes,
+    myShare = amount / 2,
+    friendShare = amount / 2,
+    recurrence,
+  } = params;
 
   try {
-    // CORRECCIÓN 1: Usar alias 'data: expense'
     const { data: expense, error: expenseError } = await supabaseClient
       .from('expenses')
       .insert({
@@ -22,18 +36,18 @@ export async function createExpenseBetweenFriends(params: {
         date: date || new Date().toISOString().split('T')[0],
         currency_code: 'USD',
         group_id: null,
-      })
+        notes: notes || null,
+        ...(recurrence ? { recurrence } : {}),
+      } as any)
       .select()
       .single();
 
     if (expenseError) throw expenseError;
     if (!expense) throw new Error('No se pudo crear el gasto');
 
-    const splitAmount = amount / 2;
-    
     const splits = [
-      { expense_id: expense.id, user_id: payerId, amount: splitAmount },
-      { expense_id: expense.id, user_id: friendId, amount: splitAmount },
+      { expense_id: expense.id, user_id: payerId, amount: myShare },
+      { expense_id: expense.id, user_id: friendId, amount: friendShare },
     ];
 
     const { error: splitsError } = await supabaseClient

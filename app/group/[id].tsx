@@ -1,6 +1,7 @@
 import { useAuth } from '@/hooks/useAuth';
 import type { GroupExpense, GroupMemberWithProfile } from '@/services/groups';
 import { getGroupExpenses, getGroupMembers, leaveGroup } from '@/services/groups';
+import { rowsToCsv, shareCsv } from '@/utils/exportCsv';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useState } from 'react';
@@ -27,6 +28,52 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 
 type Tab = 'expenses' | 'balances';
+type SimplifiedDebt = { from: string; fromName: string; to: string; toName: string; amount: number };
+
+function simplifyDebts(members: GroupMemberWithProfile[], currentUserId: string): SimplifiedDebt[] {
+  // Build net position map: positive = owed to this person, negative = owes others
+  const netMap: Record<string, { name: string; net: number }> = {};
+  for (const m of members) {
+    const name = m.profile?.full_name ?? m.profile?.email ?? 'Unknown';
+    netMap[m.user_id] = { name, net: 0 };
+  }
+  // Pairwise balances from members' perspective relative to current user
+  // Instead, compute from the balance field (balance > 0 means they owe current user)
+  for (const m of members) {
+    if (m.user_id === currentUserId) continue;
+    netMap[currentUserId].net += m.balance > 0 ? m.balance : 0;
+    netMap[currentUserId].net -= m.balance < 0 ? Math.abs(m.balance) : 0;
+    netMap[m.user_id].net += m.balance < 0 ? Math.abs(m.balance) : 0;
+    netMap[m.user_id].net -= m.balance > 0 ? m.balance : 0;
+  }
+
+  const givers = Object.entries(netMap)
+    .filter(([, v]) => v.net > 0.005)
+    .map(([id, v]) => ({ id, name: v.name, amount: v.net }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const receivers = Object.entries(netMap)
+    .filter(([, v]) => v.net < -0.005)
+    .map(([id, v]) => ({ id, name: v.name, amount: -v.net }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const result: SimplifiedDebt[] = [];
+  let gi = 0;
+  let ri = 0;
+  while (gi < givers.length && ri < receivers.length) {
+    const giver = givers[gi];
+    const receiver = receivers[ri];
+    const transfer = Math.min(giver.amount, receiver.amount);
+    if (transfer > 0.005) {
+      result.push({ from: receiver.id, fromName: receiver.name, to: giver.id, toName: giver.name, amount: transfer });
+    }
+    giver.amount -= transfer;
+    receiver.amount -= transfer;
+    if (giver.amount < 0.005) gi++;
+    if (receiver.amount < 0.005) ri++;
+  }
+  return result;
+}
 
 export default function GroupDetailScreen() {
   const { id, name } = useLocalSearchParams<{ id: string; name: string }>();
@@ -37,6 +84,7 @@ export default function GroupDetailScreen() {
   const [members, setMembers] = useState<GroupMemberWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [simplify, setSimplify] = useState(false);
 
   const load = useCallback(async () => {
     if (!user || !id) return;
@@ -90,7 +138,10 @@ export default function GroupDetailScreen() {
       : '';
 
     return (
-      <View style={styles.expenseRow}>
+      <TouchableOpacity
+        style={styles.expenseRow}
+        onPress={() => router.push({ pathname: '/expense/[id]', params: { id: item.id } })}
+      >
         <View style={styles.expenseIcon}>
           <MaterialCommunityIcons name={icon as any} size={20} color="#6b7280" />
         </View>
@@ -108,7 +159,7 @@ export default function GroupDetailScreen() {
               : `you owe $${item.my_share.toFixed(2)}`}
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   }
 
@@ -165,6 +216,26 @@ export default function GroupDetailScreen() {
               onPress={() =>
                 Alert.alert(name ?? 'Group', 'Group options', [
                   {
+                    text: 'Export as CSV',
+                    onPress: async () => {
+                      try {
+                        const csv = rowsToCsv(
+                          ['Date', 'Description', 'Amount', 'Paid by', 'Your share'],
+                          expenses.map((e) => [
+                            e.date ?? '',
+                            e.description,
+                            e.amount.toFixed(2),
+                            e.i_paid ? 'You' : e.payer_name,
+                            e.my_share.toFixed(2),
+                          ])
+                        );
+                        await shareCsv(`group-${name ?? 'expenses'}.csv`, csv);
+                      } catch (err: any) {
+                        Alert.alert('Export failed', err.message);
+                      }
+                    },
+                  },
+                  {
                     text: 'Leave group',
                     style: 'destructive',
                     onPress: handleLeave,
@@ -219,12 +290,73 @@ export default function GroupDetailScreen() {
           />
         ) : (
           <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-            {members.map((m) => (
-              <View key={m.user_id}>
-                {renderMember({ item: m })}
-                <View style={styles.separator} />
+            {/* Simplify toggle */}
+            <TouchableOpacity style={styles.simplifyRow} onPress={() => setSimplify((v) => !v)}>
+              <View style={[styles.simplifyToggle, simplify && styles.simplifyToggleOn]}>
+                <View style={[styles.simplifyThumb, simplify && styles.simplifyThumbOn]} />
               </View>
-            ))}
+              <Text style={styles.simplifyLabel}>Simplify debts</Text>
+              <Text style={styles.simplifyDesc}>
+                {simplify ? 'Showing minimized transactions' : 'Show fewest transactions'}
+              </Text>
+            </TouchableOpacity>
+            <View style={styles.separator} />
+
+            {simplify ? (
+              (() => {
+                const debts = simplifyDebts(members, user?.id ?? '');
+                if (debts.length === 0) {
+                  return (
+                    <View style={styles.emptyState}>
+                      <Ionicons name="checkmark-circle-outline" size={48} color="#10b981" />
+                      <Text style={styles.emptyTitle}>All settled up!</Text>
+                    </View>
+                  );
+                }
+                return debts.map((d, i) => (
+                  <View key={i}>
+                    <View style={styles.debtRow}>
+                      <View style={styles.memberAvatar}>
+                        <Text style={styles.memberAvatarText}>{d.fromName.charAt(0).toUpperCase()}</Text>
+                      </View>
+                      <View style={styles.memberInfo}>
+                        <Text style={styles.memberName}>
+                          {d.fromName} → {d.toName}
+                        </Text>
+                        <Text style={{ fontSize: 13, color: '#ef4444', fontWeight: '600' }}>
+                          owes ${d.amount.toFixed(2)}
+                        </Text>
+                      </View>
+                      {(d.from === user?.id || d.to === user?.id) && (
+                        <TouchableOpacity
+                          style={styles.settleBtn}
+                          onPress={() =>
+                            router.push({
+                              pathname: '/settle-up',
+                              params: {
+                                friendId: d.from === user?.id ? d.to : d.from,
+                                friendName: d.from === user?.id ? d.toName : d.fromName,
+                                balance: (d.from === user?.id ? -d.amount : d.amount).toString(),
+                              },
+                            })
+                          }
+                        >
+                          <Text style={styles.settleBtnText}>Settle</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    <View style={styles.separator} />
+                  </View>
+                ));
+              })()
+            ) : (
+              members.map((m) => (
+                <View key={m.user_id}>
+                  {renderMember({ item: m })}
+                  <View style={styles.separator} />
+                </View>
+              ))
+            )}
           </ScrollView>
         )}
 
@@ -312,6 +444,38 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   settleBtnText: { color: '#5BC5A7', fontWeight: '600', fontSize: 13 },
+  simplifyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  simplifyToggle: {
+    width: 44,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#d1d5db',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  simplifyToggleOn: { backgroundColor: '#5BC5A7' },
+  simplifyThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    alignSelf: 'flex-start',
+  },
+  simplifyThumbOn: { alignSelf: 'flex-end' },
+  simplifyLabel: { fontSize: 15, fontWeight: '600', color: '#111' },
+  simplifyDesc: { flex: 1, fontSize: 12, color: '#9ca3af', textAlign: 'right' },
+  debtRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: '#e5e7eb', marginLeft: 16 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
   emptyTitle: { fontSize: 20, fontWeight: '700', color: '#111', marginTop: 20, marginBottom: 8 },

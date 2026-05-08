@@ -156,7 +156,10 @@ export default function ActivityScreen() {
       : `-$${item.my_share.toFixed(2)}`;
 
     return (
-      <View style={styles.itemRow}>
+      <TouchableOpacity
+        style={styles.itemRow}
+        onPress={() => router.push({ pathname: '/expense/[id]', params: { id: item.id } })}
+      >
         <View style={[styles.itemIcon, item.type === 'settlement' && { backgroundColor: '#ecfdf5' }]}>
           <MaterialCommunityIcons name={icon as any} size={20} color={item.type === 'settlement' ? '#10b981' : '#6b7280'} />
         </View>
@@ -172,7 +175,7 @@ export default function ActivityScreen() {
           <Text style={[styles.itemAmount, { color: amountColor }]}>{amountLabel}</Text>
           <Text style={styles.itemTotal}>${item.amount.toFixed(2)} total</Text>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   }
 
