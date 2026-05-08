@@ -35,6 +35,7 @@ Construido para gestionar gastos compartidos entre amigos y grupos. Esta aplicac
 ## ⚙️ Conexión a la Base de Datos (Supabase)
 
 ### 1. Variables de Entorno
+
 Crea un archivo `.env` en la raíz del proyecto (este archivo está ignorado en Git) y define las siguientes variables:
 
 ```env
@@ -55,3 +56,4 @@ El AuthProvider envuelve toda la aplicación en el archivo raíz app/_layout.tsx
 import { useAuth } from '@/hooks';
 
 const { user, session, loading, signOut } = useAuth();
+```

@@ -1,0 +1,10 @@
+node_modules
+.expo
+dist
+build
+web-build
+package-lock.json
+yarn.lock
+ios
+android
+assets

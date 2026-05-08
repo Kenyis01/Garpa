@@ -1,64 +1,69 @@
-import { useFriends } from '@/contexts/FriendsContext';
+import { useFriends, type Friend } from '@/contexts/FriendsContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import {
-    FlatList,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
+import { memo, useCallback, useState } from 'react';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AddFriendsScreen from './AddFriendsScreen';
+
+type FriendRowProps = {
+  friend: Friend;
+  onPress: (friend: Friend) => void;
+};
+
+const FriendRow = memo(function FriendRow({ friend, onPress }: FriendRowProps) {
+  const initial = friend.name.charAt(0).toUpperCase();
+  const isSettled = friend.balance === 0;
+  const statusText = isSettled ? 'settled up' : 'has expenses';
+
+  return (
+    <TouchableOpacity
+      style={styles.friendRow}
+      onPress={() => onPress(friend)}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${friend.name}`}
+    >
+      <View style={styles.avatarContainer}>
+        <View style={styles.avatarSquare}>
+          <Text style={styles.avatarText}>{initial}</Text>
+        </View>
+      </View>
+      <View style={styles.friendInfo}>
+        <Text style={styles.friendName}>{friend.name}</Text>
+        <Text style={styles.friendStatus}>{statusText}</Text>
+      </View>
+      <View style={styles.balanceContainer}>
+        <Text style={styles.balanceText}>
+          {isSettled ? 'settled up' : `$${friend.balance.toFixed(2)}`}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+});
+
+const Separator = memo(() => <View style={styles.separator} />);
 
 export default function FriendsTabScreen() {
   const router = useRouter();
   const { friends } = useFriends();
   const [showAddFriends, setShowAddFriends] = useState(false);
 
-  function renderFriend({ item }: { item: Friend }) {
-    const initial = item.name.charAt(0).toUpperCase();
-    const isSettled = item.balance === 0;
-    const statusText = isSettled ? 'settled up' : 'no expenses';
+  const handleOpenFriend = useCallback(
+    (friend: Friend) => {
+      router.push({
+        pathname: '/friends/[id]',
+        params: { id: friend.id, name: friend.name },
+      });
+    },
+    [router],
+  );
 
-    return (
-      <TouchableOpacity
-        style={styles.friendRow}
-        onPress={() => {
-          router.push({
-            pathname: '/friends/[id]',
-            params: { id: item.id, name: item.name },
-          } as any);
-        }}
-        activeOpacity={0.7}
-      >
-        {/* Avatar */}
-        <View style={styles.avatarContainer}>
-          {item.avatar_url ? (
-            <View style={styles.avatarSquare}>
-              {/* Aquí iría Image si tuviera URL */}
-              <Text style={styles.avatarText}>{initial}</Text>
-            </View>
-          ) : (
-            <View style={styles.avatarSquare}>
-              <Text style={styles.avatarText}>{initial}</Text>
-            </View>
-          )}
-        </View>
+  const renderFriend = useCallback(
+    ({ item }: { item: Friend }) => <FriendRow friend={item} onPress={handleOpenFriend} />,
+    [handleOpenFriend],
+  );
 
-        {/* Info del amigo */}
-        <View style={styles.friendInfo}>
-          <Text style={styles.friendName}>{item.name}</Text>
-          <Text style={styles.friendStatus}>{statusText}</Text>
-        </View>
-
-        {/* Balance */}
-        <View style={styles.balanceContainer}>
-          <Text style={styles.balanceText}>settled up</Text>
-        </View>
-      </TouchableOpacity>
-    );
-  }
+  const keyExtractor = useCallback((item: Friend) => item.id, []);
 
   function renderEmptyState() {
     return (
@@ -66,11 +71,12 @@ export default function FriendsTabScreen() {
         <View style={styles.emptyIconContainer}>
           <Ionicons name="people-outline" size={80} color="#d1d5db" />
         </View>
-        <Text style={styles.emptyTitle}>Welcome to G garpa!</Text>
+        <Text style={styles.emptyTitle}>Welcome to Garpa!</Text>
         <Text style={styles.emptySubtitle}>Add friends to start splitting expenses.</Text>
         <TouchableOpacity
           style={styles.addFriendsButton}
           onPress={() => setShowAddFriends(true)}
+          accessibilityRole="button"
         >
           <Text style={styles.addFriendsButtonText}>Add friends</Text>
         </TouchableOpacity>
@@ -87,6 +93,8 @@ export default function FriendsTabScreen() {
             <TouchableOpacity
               style={styles.headerButton}
               onPress={() => setShowAddFriends(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Add friends"
             >
               <Ionicons name="person-add" size={24} color="#5BC5A7" />
             </TouchableOpacity>
@@ -100,32 +108,27 @@ export default function FriendsTabScreen() {
           <FlatList
             data={friends}
             renderItem={renderFriend}
-            keyExtractor={(item) => item.id}
+            keyExtractor={keyExtractor}
             contentContainerStyle={styles.listContent}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            ItemSeparatorComponent={Separator}
             showsVerticalScrollIndicator={false}
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            windowSize={10}
+            removeClippedSubviews
           />
         )}
       </View>
 
-      {/* Add Friends Bottom Sheet */}
       <AddFriendsScreen visible={showAddFriends} onClose={() => setShowAddFriends(false)} />
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  headerButton: {
-    marginRight: 8,
-    padding: 4,
-  },
-  listContent: {
-    paddingVertical: 8,
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
+  headerButton: { marginRight: 8, padding: 4 },
+  listContent: { paddingVertical: 8 },
   friendRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -133,9 +136,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     backgroundColor: '#fff',
   },
-  avatarContainer: {
-    marginRight: 12,
-  },
+  avatarContainer: { marginRight: 12 },
   avatarSquare: {
     width: 50,
     height: 50,
@@ -144,32 +145,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  friendInfo: {
-    flex: 1,
-  },
-  friendName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 2,
-  },
-  friendStatus: {
-    fontSize: 13,
-    color: '#6b7280',
-  },
-  balanceContainer: {
-    alignItems: 'flex-end',
-  },
-  balanceText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#9ca3af',
-  },
+  avatarText: { fontSize: 20, fontWeight: '600', color: '#6b7280' },
+  friendInfo: { flex: 1 },
+  friendName: { fontSize: 16, fontWeight: '600', color: '#111827', marginBottom: 2 },
+  friendStatus: { fontSize: 13, color: '#6b7280' },
+  balanceContainer: { alignItems: 'flex-end' },
+  balanceText: { fontSize: 14, fontWeight: '500', color: '#9ca3af' },
   separator: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: '#e5e7eb',
@@ -181,9 +162,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 32,
   },
-  emptyIconContainer: {
-    marginBottom: 24,
-  },
+  emptyIconContainer: { marginBottom: 24 },
   emptyTitle: {
     fontSize: 22,
     fontWeight: '700',
@@ -206,9 +185,5 @@ const styles = StyleSheet.create({
     minWidth: 200,
     alignItems: 'center',
   },
-  addFriendsButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  addFriendsButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

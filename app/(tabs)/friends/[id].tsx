@@ -1,20 +1,18 @@
 import AddExpenseModal from '@/components/AddExpenseModal';
-import { useFriends } from '@/contexts/FriendsContext';
+import SettleUpModal from '@/components/SettleUpModal';
+import { useFriends, type LocalExpense } from '@/contexts/FriendsContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
-import {
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { useState } from 'react';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function FriendDetailScreen() {
-  const { id, name } = useLocalSearchParams();
+  const params = useLocalSearchParams<{ id: string; name: string }>();
+  const id = params.id ?? '';
+  const name = params.name ?? '';
   const { friends } = useFriends();
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [showSettleUp, setShowSettleUp] = useState(false);
 
   const friend = friends.find((f) => f.id === id);
 
@@ -28,24 +26,18 @@ export default function FriendDetailScreen() {
 
   const balance = friend.balance;
   const isSettled = balance === 0;
-  const oweText = balance > 0 
-    ? `${name} owes you` 
-    : balance < 0 
-    ? `You owe ${name}` 
-    : 'settled up';
+  const oweText = balance > 0 ? `${name} owes you` : balance < 0 ? `You owe ${name}` : 'settled up';
 
-  function renderExpense({ item }: { item: any }) {
+  function renderExpense({ item }: { item: LocalExpense }) {
     return (
       <View style={styles.expenseRow}>
         <View style={styles.expenseInfo}>
           <Text style={styles.expenseDescription}>{item.description}</Text>
-          <Text style={styles.expenseDate}>{item.date}</Text>
+          <Text style={styles.expenseDate}>{item.date.split('T')[0]}</Text>
         </View>
         <View style={styles.expenseAmount}>
           <Text style={styles.expensePrice}>${item.amount.toFixed(2)}</Text>
-          <Text style={styles.expenseShare}>
-            You paid ${(item.amount / 2).toFixed(2)}
-          </Text>
+          <Text style={styles.expenseShare}>You paid ${(item.amount / 2).toFixed(2)}</Text>
         </View>
       </View>
     );
@@ -76,48 +68,52 @@ export default function FriendDetailScreen() {
         <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>{oweText}</Text>
           {!isSettled && (
-            <Text
-              style={[
-                styles.balanceAmount,
-                { color: balance > 0 ? '#10b981' : '#ef4444' },
-              ]}
-            >
+            <Text style={[styles.balanceAmount, { color: balance > 0 ? '#10b981' : '#ef4444' }]}>
               ${Math.abs(balance).toFixed(2)}
             </Text>
           )}
           {!isSettled && (
-            <TouchableOpacity style={styles.settleButton}>
+            <TouchableOpacity
+              style={styles.settleButton}
+              onPress={() => setShowSettleUp(true)}
+              accessibilityRole="button"
+            >
               <Text style={styles.settleButtonText}>Settle up</Text>
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Expenses List */}
         <FlatList
-          data={friend.expenses || []}
+          data={friend.expenses}
           renderItem={renderExpense}
-          keyExtractor={(item, index) => index.toString()}
+          keyExtractor={(item) => item.id}
           ListEmptyComponent={renderEmptyState}
-          contentContainerStyle={
-            friend.expenses?.length === 0 ? { flex: 1 } : styles.listContent
-          }
+          contentContainerStyle={friend.expenses.length === 0 ? { flex: 1 } : styles.listContent}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
 
-        {/* FAB */}
         <TouchableOpacity
           style={styles.fab}
           onPress={() => setShowAddExpense(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Add expense"
         >
           <Ionicons name="add" size={24} color="#fff" />
         </TouchableOpacity>
 
-        {/* Add Expense Modal */}
         <AddExpenseModal
           visible={showAddExpense}
           onClose={() => setShowAddExpense(false)}
-          friendId={id as string}
-          friendName={name as string}
+          friendId={id}
+          friendName={name}
+        />
+
+        <SettleUpModal
+          visible={showSettleUp}
+          onClose={() => setShowSettleUp(false)}
+          friendId={id}
+          friendName={name}
+          balance={balance}
         />
       </View>
     </>

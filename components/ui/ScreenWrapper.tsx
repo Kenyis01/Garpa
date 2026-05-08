@@ -1,19 +1,21 @@
 import Colors from '@/constants/Colors';
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
+import type { ReactNode } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
   StatusBar as RNStatusBar,
   SafeAreaView,
   StyleSheet,
-  View
+  View,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 
 interface ScreenWrapperProps {
-  children: React.ReactNode;
-  style?: any;
-  withInput?: boolean; // Ponlo en true si la pantalla tiene formularios
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+  withInput?: boolean;
 }
 
 export const ScreenWrapper = ({ children, style, withInput = false }: ScreenWrapperProps) => {

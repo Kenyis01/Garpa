@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useState, type ReactNode } from 'react';
+import { randomUUID } from 'expo-crypto';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
-// 1. Definimos qué es un Gasto
-export type Expense = {
+export type LocalExpense = {
   id: string;
   description: string;
   amount: number;
@@ -9,22 +9,24 @@ export type Expense = {
   payerId: 'user' | string;
 };
 
-type Friend = {
+export type Friend = {
   id: string;
   name: string;
   phone: string;
   email?: string;
-  balance: number; 
+  balance: number;
   avatar_url?: string;
-  expenses: Expense[]; // <--- Agregamos el historial aquí
+  expenses: LocalExpense[];
 };
+
+type ContactInput = Pick<Friend, 'id' | 'name' | 'phone' | 'email'>;
 
 type FriendsContextValue = {
   friends: Friend[];
-  addFriends: (contacts: { id: string; name: string; phone: string; email?: string }[]) => void;
+  addFriends: (contacts: ContactInput[]) => void;
   removeFriend: (friendId: string) => void;
-  // Cambiamos updateBalance por addExpense, que es más completo
   addExpense: (friendId: string, description: string, amount: number) => void;
+  setBalance: (friendId: string, balance: number) => void;
 };
 
 const FriendsContext = createContext<FriendsContextValue | undefined>(undefined);
@@ -32,58 +34,56 @@ const FriendsContext = createContext<FriendsContextValue | undefined>(undefined)
 export function FriendsProvider({ children }: { children: ReactNode }) {
   const [friends, setFriends] = useState<Friend[]>([]);
 
-  function addFriends(contacts: { id: string; name: string; phone: string; email?: string }[]) {
-    const newFriends: Friend[] = contacts.map((contact) => ({
-      id: contact.id,
-      name: contact.name,
-      phone: contact.phone,
-      email: contact.email,
-      balance: 0,
-      avatar_url: undefined,
-      expenses: [], // Empiezan sin gastos
-    }));
-
-    setFriends((prevFriends) => {
-      const existingIds = new Set(prevFriends.map((f) => f.id));
-      const uniqueNewFriends = newFriends.filter((f) => !existingIds.has(f.id));
-      return [...prevFriends, ...uniqueNewFriends];
+  const addFriends = useCallback((contacts: ContactInput[]) => {
+    setFriends((prev) => {
+      const existingIds = new Set(prev.map((f) => f.id));
+      const newcomers: Friend[] = contacts
+        .filter((c) => !existingIds.has(c.id))
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          phone: c.phone,
+          email: c.email,
+          balance: 0,
+          avatar_url: undefined,
+          expenses: [],
+        }));
+      return [...prev, ...newcomers];
     });
-  }
+  }, []);
 
-  function removeFriend(friendId: string) {
-    setFriends((prevFriends) => prevFriends.filter((f) => f.id !== friendId));
-  }
+  const removeFriend = useCallback((friendId: string) => {
+    setFriends((prev) => prev.filter((f) => f.id !== friendId));
+  }, []);
 
-  // ESTA ES LA FUNCIÓN MÁGICA NUEVA
-  function addExpense(friendId: string, description: string, amount: number) {
-    setFriends((prevFriends) =>
-      prevFriends.map((f) => {
-        if (f.id === friendId) {
-          const newExpense: Expense = {
-            id: Math.random().toString(36).substr(2, 9),
-            description,
-            amount,
-            date: new Date().toISOString(),
-            payerId: 'user',
-          };
-          
-          return {
-            ...f,
-            expenses: [newExpense, ...f.expenses], // Agregamos al historial
-            balance: f.balance + (amount / 2), // Sumamos la mitad al saldo
-          };
-        }
-        return f;
-      })
+  const addExpense = useCallback((friendId: string, description: string, amount: number) => {
+    setFriends((prev) =>
+      prev.map((f) => {
+        if (f.id !== friendId) return f;
+        const expense: LocalExpense = {
+          id: randomUUID(),
+          description,
+          amount,
+          date: new Date().toISOString(),
+          payerId: 'user',
+        };
+        return {
+          ...f,
+          expenses: [expense, ...f.expenses],
+          balance: f.balance + amount / 2,
+        };
+      }),
     );
-  }
+  }, []);
 
-  const value: FriendsContextValue = {
-    friends,
-    addFriends,
-    removeFriend,
-    addExpense, // La exportamos
-  };
+  const setBalance = useCallback((friendId: string, balance: number) => {
+    setFriends((prev) => prev.map((f) => (f.id === friendId ? { ...f, balance } : f)));
+  }, []);
+
+  const value = useMemo<FriendsContextValue>(
+    () => ({ friends, addFriends, removeFriend, addExpense, setBalance }),
+    [friends, addFriends, removeFriend, addExpense, setBalance],
+  );
 
   return <FriendsContext.Provider value={value}>{children}</FriendsContext.Provider>;
 }

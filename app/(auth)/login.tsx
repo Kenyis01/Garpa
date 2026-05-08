@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { useAuth } from '@/hooks';
+import { signInSchema } from '@/lib/validation';
 
 export default function LoginScreen() {
   const { loading, signInWithPassword, signUpWithPassword } = useAuth();
@@ -22,33 +23,40 @@ export default function LoginScreen() {
 
   const isBusy = loading || submitting !== null;
 
-  async function handleLogin() {
-    if (!email || !password) {
-      Alert.alert('Datos incompletos', 'Por favor completa Email y Password.');
-      return;
+  function validate(): { email: string; password: string } | null {
+    const parsed = signInSchema.safeParse({ email, password });
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? 'Datos inválidos';
+      Alert.alert('Datos inválidos', message);
+      return null;
     }
+    return parsed.data;
+  }
+
+  async function handleLogin() {
+    const data = validate();
+    if (!data) return;
     setSubmitting('login');
     try {
-      await signInWithPassword(email.trim(), password);
-      // La navegación se puede manejar escuchando cambios de sesión
-    } catch (error: any) {
-      Alert.alert('Error al ingresar', error.message ?? 'Intenta nuevamente.');
+      await signInWithPassword(data.email, data.password);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Intenta nuevamente.';
+      Alert.alert('Error al ingresar', message);
     } finally {
       setSubmitting(null);
     }
   }
 
   async function handleSignUp() {
-    if (!email || !password) {
-      Alert.alert('Datos incompletos', 'Por favor completa Email y Password.');
-      return;
-    }
+    const data = validate();
+    if (!data) return;
     setSubmitting('signup');
     try {
-      await signUpWithPassword(email.trim(), password);
+      await signUpWithPassword(data.email, data.password);
       Alert.alert('Cuenta creada', 'Revisa tu email si se requiere verificación.');
-    } catch (error: any) {
-      Alert.alert('Error al crear cuenta', error.message ?? 'Intenta nuevamente.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Intenta nuevamente.';
+      Alert.alert('Error al crear cuenta', message);
     } finally {
       setSubmitting(null);
     }
@@ -71,9 +79,12 @@ export default function LoginScreen() {
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
+              autoCorrect={false}
               keyboardType="email-address"
+              textContentType="emailAddress"
               placeholder="tu@email.com"
               placeholderTextColor="#999"
+              accessibilityLabel="Email"
             />
           </View>
 
@@ -84,8 +95,12 @@ export default function LoginScreen() {
               value={password}
               onChangeText={setPassword}
               secureTextEntry
+              textContentType="password"
+              autoCapitalize="none"
+              autoCorrect={false}
               placeholder="••••••••"
               placeholderTextColor="#999"
+              accessibilityLabel="Password"
             />
           </View>
 
@@ -201,4 +216,3 @@ const styles = StyleSheet.create({
     color: '#e5e7eb',
   },
 });
-

@@ -1,22 +1,7 @@
-import React from 'react';
-import {
-  FlatList,
-  Modal,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFriends } from '@/contexts/FriendsContext';
-
-type Contact = {
-  id: string;
-  name: string;
-  phone: string;
-  email?: string;
-};
+import type { Contact } from '@/components/add-friends/types';
 
 type ReviewFriendsScreenProps = {
   visible: boolean;
@@ -31,17 +16,11 @@ export default function ReviewFriendsScreen({
   onClose,
   onAddFriends,
 }: ReviewFriendsScreenProps) {
-  const router = useRouter();
   const { addFriends } = useFriends();
 
   function handleAddFriends() {
-    // Guardar los contactos en el contexto
     addFriends(contacts);
-    
-    // Cerrar todos los modales (esto se hace desde AddFriendsScreen)
     onAddFriends();
-    
-    // Cerrar este modal también
     onClose();
   }
 

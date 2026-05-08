@@ -1,20 +1,22 @@
 import { useFriends } from '@/contexts/FriendsContext';
 import { useAuth } from '@/hooks/useAuth';
 import { createExpenseBetweenFriends } from '@/lib/expenses';
+import { logError } from '@/lib/logger';
+import { createExpenseSchema, parseAmountInput } from '@/lib/validation';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Keyboard,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Keyboard,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 interface AddExpenseModalProps {
@@ -24,15 +26,15 @@ interface AddExpenseModalProps {
   friendName: string;
 }
 
-export default function AddExpenseModal({ 
-  visible, 
-  onClose, 
-  friendId, 
-  friendName 
+export default function AddExpenseModal({
+  visible,
+  onClose,
+  friendId,
+  friendName,
 }: AddExpenseModalProps) {
   const { user } = useAuth();
   const { addExpense } = useFriends();
-  
+
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
@@ -40,30 +42,37 @@ export default function AddExpenseModal({
   const descriptionInputRef = useRef<TextInput>(null);
 
   useEffect(() => {
-    if (visible) {
-      setTimeout(() => {
-        descriptionInputRef.current?.focus();
-      }, 300);
-    } else {
+    if (!visible) {
       setDescription('');
       setAmount('');
     }
   }, [visible]);
 
   const handleSave = async () => {
-    if (!description || !amount) {
-      Alert.alert('Missing info', 'Please enter a description and amount.');
-      return;
-    }
-
     if (!user) {
       Alert.alert('Error', 'You must be logged in to add expenses');
       return;
     }
 
-    const numericAmount = parseFloat(amount);
-    if (isNaN(numericAmount) || numericAmount <= 0) {
-      Alert.alert('Invalid amount', 'Please enter a valid amount');
+    let numericAmount: number;
+    try {
+      numericAmount = parseAmountInput(amount);
+    } catch {
+      Alert.alert('Invalid amount', 'Please enter a valid positive amount');
+      return;
+    }
+
+    const parsed = createExpenseSchema.safeParse({
+      payerId: user.id,
+      friendId,
+      amount: numericAmount,
+      description,
+      category: 'uncategorized',
+    });
+
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? 'Datos inválidos';
+      Alert.alert('Missing info', message);
       return;
     }
 
@@ -71,25 +80,15 @@ export default function AddExpenseModal({
     Keyboard.dismiss();
 
     try {
-      const result = await createExpenseBetweenFriends({
-        payerId: user.id,
-        friendId: friendId,
-        amount: numericAmount,
-        description: description,
-        category: 'uncategorized',
-      });
+      const result = await createExpenseBetweenFriends(parsed.data);
+      if (!result.success) throw result.error;
 
-      if (!result.success) {
-        throw new Error('Failed to create expense');
-      }
-
-      addExpense(friendId, description, numericAmount);
-
-      Alert.alert('Success', 'Expense added successfully');
+      addExpense(friendId, parsed.data.description, parsed.data.amount);
       onClose();
-    } catch (error: any) {
-      console.error('Error saving expense:', error);
-      Alert.alert('Error', error.message || 'Failed to save expense');
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to save expense');
+      logError('AddExpenseModal.handleSave', error);
+      Alert.alert('Error', error.message);
     } finally {
       setLoading(false);
     }
@@ -103,21 +102,12 @@ export default function AddExpenseModal({
       onRequestClose={onClose}
     >
       <View style={styles.container}>
-        
         <View style={styles.header}>
-          <TouchableOpacity 
-            onPress={onClose} 
-            style={styles.headerButton}
-            disabled={loading}
-          >
+          <TouchableOpacity onPress={onClose} style={styles.headerButton} disabled={loading}>
             <Ionicons name="close" size={28} color="#000" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Add an expense</Text>
-          <TouchableOpacity 
-            onPress={handleSave} 
-            style={styles.headerButton}
-            disabled={loading}
-          >
+          <TouchableOpacity onPress={handleSave} style={styles.headerButton} disabled={loading}>
             {loading ? (
               <ActivityIndicator size="small" color="#5bc5a7" />
             ) : (
@@ -126,24 +116,24 @@ export default function AddExpenseModal({
           </TouchableOpacity>
         </View>
 
-        <ScrollView 
+        <ScrollView
           style={styles.content}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: 200 }}
         >
-          
           <View style={styles.withContainer}>
-            <Text style={styles.withLabel}>With <Text style={{fontWeight: 'bold'}}>you</Text> and:</Text>
+            <Text style={styles.withLabel}>
+              With <Text style={{ fontWeight: 'bold' }}>you</Text> and:
+            </Text>
             <View style={styles.chip}>
-                <View style={styles.avatarSmall}>
-                    <Text style={styles.avatarText}>{friendName.charAt(0)}</Text>
-                </View>
-                <Text style={styles.chipText}>{friendName}</Text>
+              <View style={styles.avatarSmall}>
+                <Text style={styles.avatarText}>{friendName.charAt(0)}</Text>
+              </View>
+              <Text style={styles.chipText}>{friendName}</Text>
             </View>
           </View>
 
           <View style={styles.formContainer}>
-            
             <View style={styles.inputRow}>
               <View style={styles.iconBox}>
                 <MaterialCommunityIcons name="file-document-outline" size={24} color="#ccc" />
@@ -157,6 +147,8 @@ export default function AddExpenseModal({
                 onChangeText={setDescription}
                 editable={!loading}
                 returnKeyType="next"
+                autoFocus={visible}
+                accessibilityLabel="Expense description"
               />
             </View>
 
@@ -178,31 +170,32 @@ export default function AddExpenseModal({
 
           <View style={styles.splitSection}>
             <Text style={styles.splitText}>
-                Paid by <Text style={styles.boldText}>you</Text> and split <Text style={styles.boldText}>equally</Text>
+              Paid by <Text style={styles.boldText}>you</Text> and split{' '}
+              <Text style={styles.boldText}>equally</Text>
             </Text>
           </View>
         </ScrollView>
 
         <View style={styles.toolbar}>
-            <TouchableOpacity style={styles.toolItem} disabled={loading}>
-                <Ionicons name="calendar-outline" size={20} color="#555" />
-                <Text style={styles.toolText}>Today</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.toolItem} disabled={loading}>
-                <Ionicons name="people-outline" size={20} color="#555" />
-                <Text style={styles.toolText}>No group</Text>
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.toolItem} disabled={loading}>
+            <Ionicons name="calendar-outline" size={20} color="#555" />
+            <Text style={styles.toolText}>Today</Text>
+          </TouchableOpacity>
 
-            <View style={{flex: 1}} /> 
+          <TouchableOpacity style={styles.toolItem} disabled={loading}>
+            <Ionicons name="people-outline" size={20} color="#555" />
+            <Text style={styles.toolText}>No group</Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity style={styles.toolItemIconOnly} disabled={loading}>
-                <Ionicons name="camera-outline" size={24} color="#555" />
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.toolItemIconOnly} disabled={loading}>
-                <Ionicons name="create-outline" size={24} color="#555" />
-            </TouchableOpacity>
+          <View style={{ flex: 1 }} />
+
+          <TouchableOpacity style={styles.toolItemIconOnly} disabled={loading}>
+            <Ionicons name="camera-outline" size={24} color="#555" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.toolItemIconOnly} disabled={loading}>
+            <Ionicons name="create-outline" size={24} color="#555" />
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -357,5 +350,5 @@ const styles = StyleSheet.create({
   toolItemIconOnly: {
     padding: 8,
     marginLeft: 10,
-  }
+  },
 });

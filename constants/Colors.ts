@@ -28,5 +28,5 @@ export default {
     secondary: '#4338ca',
     muted: '#6b7280',
     orange: '#FF652F', // Para "Settle up"
-  }
+  },
 };

@@ -10,8 +10,8 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors.brand.primary,
         tabBarStyle: { paddingBottom: 5, paddingTop: 5, height: 60 },
         headerShown: false, // Ocultamos el header nativo de las tabs
-      }}>
-      
+      }}
+    >
       {/* 1. Pestaña Amigos (Apunta a friends.tsx) */}
       <Tabs.Screen
         name="friends"

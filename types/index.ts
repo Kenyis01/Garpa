@@ -1,6 +1,14 @@
 export type {
-  Database, Expense,
-  ExpenseParticipant, Group,
-  GroupMember, Json, Profile
+  Database,
+  Expense,
+  ExpenseCategory,
+  ExpenseParticipant,
+  ExpenseSplit,
+  Friendship,
+  FriendshipStatus,
+  Group,
+  GroupMember,
+  Json,
+  Profile,
+  Settlement,
 } from './database';
-

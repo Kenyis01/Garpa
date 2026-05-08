@@ -32,4 +32,3 @@ export async function createGroup(input: CreateGroupInput) {
   if (error) throw error;
   return data as Group;
 }
-
