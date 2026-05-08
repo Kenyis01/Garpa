@@ -50,11 +50,7 @@ function RootNavigator() {
         name="new-contact"
         options={{ presentation: 'card', headerShown: false }}
       />
-      <Stack.Screen
-        name="review-friends"
-        options={{ presentation: 'card', headerShown: false }}
-      />
-      <Stack.Screen name="+not-found" />
+<Stack.Screen name="+not-found" />
     </Stack>
   );
 }

@@ -10,6 +10,21 @@ export type FriendWithBalance = {
   balance: number; // positive = they owe me, negative = I owe them
 };
 
+export type ExpenseDetail = {
+  id: string;
+  description: string;
+  amount: number;
+  currency_code: string | null;
+  date: string | null;
+  category: string | null;
+  notes: string | null;
+  receipt_url: string | null;
+  payer_id: string;
+  group_id: string | null;
+  is_settlement: boolean;
+  splits: { user_id: string; amount: number; name: string; avatar_url: string | null }[];
+};
+
 /** Search existing users by email or name (for adding friends). */
 export async function searchUsers(query: string, currentUserId: string): Promise<Profile[]> {
   const q = query.trim().toLowerCase();
@@ -26,11 +41,14 @@ export async function searchUsers(query: string, currentUserId: string): Promise
   return (data as Profile[]) ?? [];
 }
 
-/** Get all accepted friends with their current balances. */
+/**
+ * Get all accepted friends with their current balances.
+ * Uses 5 queries total regardless of friend count (no N+1).
+ */
 export async function getFriendsWithBalances(userId: string): Promise<FriendWithBalance[]> {
   const { data: friendships, error: fErr } = await supabase
     .from('friendships')
-    .select('*')
+    .select('id, user_id_1, user_id_2')
     .or(`user_id_1.eq.${userId},user_id_2.eq.${userId}`)
     .eq('status', 'accepted');
 
@@ -41,40 +59,82 @@ export async function getFriendsWithBalances(userId: string): Promise<FriendWith
     f.user_id_1 === userId ? f.user_id_2 : f.user_id_1
   );
 
-  const { data: profiles, error: pErr } = await supabase
-    .from('profiles')
-    .select('*')
-    .in('id', friendIds);
+  // Fetch profiles and all relevant splits in parallel
+  const [profilesRes, mySplitsRes] = await Promise.all([
+    supabase.from('profiles').select('id, full_name, email, avatar_url').in('id', friendIds),
+    supabase.from('expense_splits').select('expense_id, amount').eq('user_id', userId),
+  ]);
 
-  if (pErr) throw pErr;
+  if (!mySplitsRes.data?.length) {
+    return friendships.map((f) => {
+      const friendId = f.user_id_1 === userId ? f.user_id_2 : f.user_id_1;
+      const profile = profilesRes.data?.find((p) => p.id === friendId);
+      return {
+        friendshipId: f.id,
+        id: friendId,
+        name: profile?.full_name ?? profile?.email ?? 'Unknown',
+        email: profile?.email ?? null,
+        avatar_url: profile?.avatar_url ?? null,
+        balance: 0,
+      };
+    });
+  }
 
-  // Load all direct (non-group) expense splits involving the current user
-  const { data: mySplits } = await supabase
-    .from('expense_splits')
-    .select('expense_id, amount');
-  // Filter client-side after fetching related expenses
-  // Use a simpler per-friendship balance calc
-  const balances = await Promise.all(
-    friendIds.map((friendId) => calcBalance(userId, friendId))
-  );
+  const myExpenseIds = mySplitsRes.data.map((s) => s.expense_id);
 
-  return friendships.map((f, i) => {
+  // Get all friend splits for the same expenses (bulk, not per-friend)
+  const [friendSplitsRes, expensesRes] = await Promise.all([
+    supabase
+      .from('expense_splits')
+      .select('expense_id, user_id, amount')
+      .in('user_id', friendIds)
+      .in('expense_id', myExpenseIds),
+    supabase
+      .from('expenses')
+      .select('id, payer_id, group_id')
+      .in('id', myExpenseIds)
+      .is('group_id', null)
+      .eq('is_settlement', false),
+  ]);
+
+  const directExpenses = expensesRes.data ?? [];
+  const friendSplits = friendSplitsRes.data ?? [];
+  const mySplitsMap = new Map(mySplitsRes.data.map((s) => [s.expense_id, s.amount]));
+
+  // Compute per-friend balances in a single pass
+  const balanceMap = new Map<string, number>(friendIds.map((id) => [id, 0]));
+
+  for (const expense of directExpenses) {
+    const myShare = mySplitsMap.get(expense.id) ?? 0;
+    for (const fs of friendSplits) {
+      if (fs.expense_id !== expense.id) continue;
+      const friendId = fs.user_id;
+      if (!balanceMap.has(friendId)) continue;
+
+      if (expense.payer_id === userId) {
+        balanceMap.set(friendId, (balanceMap.get(friendId) ?? 0) + fs.amount);
+      } else if (expense.payer_id === friendId) {
+        balanceMap.set(friendId, (balanceMap.get(friendId) ?? 0) - myShare);
+      }
+    }
+  }
+
+  return friendships.map((f) => {
     const friendId = f.user_id_1 === userId ? f.user_id_2 : f.user_id_1;
-    const profile = profiles?.find((p) => p.id === friendId);
+    const profile = profilesRes.data?.find((p) => p.id === friendId);
     return {
       friendshipId: f.id,
       id: friendId,
       name: profile?.full_name ?? profile?.email ?? 'Unknown',
       email: profile?.email ?? null,
       avatar_url: profile?.avatar_url ?? null,
-      balance: balances[i],
+      balance: balanceMap.get(friendId) ?? 0,
     };
   });
 }
 
 /** Calculate balance between two users (positive = friendId owes userId). */
 export async function calcBalance(userId: string, friendId: string): Promise<number> {
-  // Get all expenses where both users have splits
   const { data: mySplits } = await supabase
     .from('expense_splits')
     .select('expense_id, amount')
@@ -84,34 +144,34 @@ export async function calcBalance(userId: string, friendId: string): Promise<num
 
   const myExpenseIds = mySplits.map((s) => s.expense_id);
 
-  const { data: friendSplits } = await supabase
-    .from('expense_splits')
-    .select('expense_id, amount')
-    .eq('user_id', friendId)
-    .in('expense_id', myExpenseIds);
+  const [friendSplitsRes, expensesRes] = await Promise.all([
+    supabase
+      .from('expense_splits')
+      .select('expense_id, amount')
+      .eq('user_id', friendId)
+      .in('expense_id', myExpenseIds),
+    supabase
+      .from('expenses')
+      .select('id, payer_id')
+      .in('id', myExpenseIds)
+      .is('group_id', null)
+      .eq('is_settlement', false),
+  ]);
 
-  if (!friendSplits?.length) return 0;
+  if (!friendSplitsRes.data?.length || !expensesRes.data?.length) return 0;
 
-  const sharedIds = friendSplits.map((s) => s.expense_id);
-
-  const { data: expenses } = await supabase
-    .from('expenses')
-    .select('id, payer_id')
-    .in('id', sharedIds)
-    .is('group_id', null);
-
-  if (!expenses?.length) return 0;
+  const friendSplitsMap = new Map(friendSplitsRes.data.map((s) => [s.expense_id, s.amount]));
+  const mySplitsMap = new Map(mySplits.map((s) => [s.expense_id, s.amount]));
 
   let balance = 0;
-  for (const expense of expenses) {
-    const myShare = mySplits.find((s) => s.expense_id === expense.id)?.amount ?? 0;
-    const friendShare = friendSplits.find((s) => s.expense_id === expense.id)?.amount ?? 0;
+  for (const expense of expensesRes.data) {
+    const myShare = mySplitsMap.get(expense.id) ?? 0;
+    const friendShare = friendSplitsMap.get(expense.id);
+    if (friendShare === undefined) continue;
 
     if (expense.payer_id === userId) {
-      // I paid → friend owes me their share
       balance += friendShare;
     } else if (expense.payer_id === friendId) {
-      // Friend paid → I owe them my share
       balance -= myShare;
     }
   }
@@ -121,16 +181,17 @@ export async function calcBalance(userId: string, friendId: string): Promise<num
 
 /** Create a friendship (accepted immediately, like Splitwise). */
 export async function addFriend(userId: string, friendId: string): Promise<void> {
-  // Check if friendship already exists in either direction
+  if (userId === friendId) throw new Error('You cannot add yourself as a friend.');
+
   const { data: existing } = await supabase
     .from('friendships')
     .select('id')
     .or(
       `and(user_id_1.eq.${userId},user_id_2.eq.${friendId}),and(user_id_1.eq.${friendId},user_id_2.eq.${userId})`
     )
-    .single();
+    .maybeSingle();
 
-  if (existing) return; // already friends
+  if (existing) return;
 
   const { error } = await supabase.from('friendships').insert({
     user_id_1: userId,
@@ -149,24 +210,19 @@ export async function removeFriendship(friendshipId: string): Promise<void> {
 
 /** Get expenses shared between two users (for the friend detail screen). */
 export async function getExpensesWithFriend(userId: string, friendId: string) {
-  const { data: mySplits } = await supabase
-    .from('expense_splits')
-    .select('expense_id, amount')
-    .eq('user_id', userId);
+  const [mySplitsRes, friendSplitsRes] = await Promise.all([
+    supabase.from('expense_splits').select('expense_id, amount').eq('user_id', userId),
+    supabase.from('expense_splits').select('expense_id, amount').eq('user_id', friendId),
+  ]);
 
-  if (!mySplits?.length) return [];
+  if (!mySplitsRes.data?.length || !friendSplitsRes.data?.length) return [];
 
-  const myExpenseIds = mySplits.map((s) => s.expense_id);
+  const myIds = new Set(mySplitsRes.data.map((s) => s.expense_id));
+  const sharedIds = friendSplitsRes.data
+    .filter((s) => myIds.has(s.expense_id))
+    .map((s) => s.expense_id);
 
-  const { data: friendSplits } = await supabase
-    .from('expense_splits')
-    .select('expense_id, amount')
-    .eq('user_id', friendId)
-    .in('expense_id', myExpenseIds);
-
-  if (!friendSplits?.length) return [];
-
-  const sharedIds = friendSplits.map((s) => s.expense_id);
+  if (!sharedIds.length) return [];
 
   const { data: expenses } = await supabase
     .from('expenses')
@@ -175,44 +231,30 @@ export async function getExpensesWithFriend(userId: string, friendId: string) {
     .is('group_id', null)
     .order('date', { ascending: false });
 
-  return (expenses ?? []).map((expense) => {
-    const myShare = mySplits.find((s) => s.expense_id === expense.id)?.amount ?? 0;
-    const friendShare = friendSplits.find((s) => s.expense_id === expense.id)?.amount ?? 0;
-    return { ...expense, myShare, friendShare };
-  });
-}
+  if (!expenses?.length) return [];
 
-export type ExpenseDetail = {
-  id: string;
-  description: string;
-  amount: number;
-  currency_code: string | null;
-  date: string | null;
-  category: string | null;
-  notes: string | null;
-  receipt_url: string | null;
-  payer_id: string;
-  group_id: string | null;
-  is_settlement: boolean;
-  splits: { user_id: string; amount: number; name: string; avatar_url: string | null }[];
-};
+  const mySplitsMap = new Map(mySplitsRes.data.map((s) => [s.expense_id, s.amount]));
+  const friendSplitsMap = new Map(friendSplitsRes.data.map((s) => [s.expense_id, s.amount]));
+
+  return expenses.map((expense) => ({
+    ...expense,
+    myShare: mySplitsMap.get(expense.id) ?? 0,
+    friendShare: friendSplitsMap.get(expense.id) ?? 0,
+  }));
+}
 
 /** Get full expense detail with participant splits and profiles. */
 export async function getExpenseDetail(expenseId: string): Promise<ExpenseDetail | null> {
-  const { data: expense } = await supabase
-    .from('expenses')
-    .select('*')
-    .eq('id', expenseId)
-    .single();
+  const [expenseRes, splitsRes] = await Promise.all([
+    supabase.from('expenses').select('*').eq('id', expenseId).single(),
+    supabase.from('expense_splits').select('user_id, amount').eq('expense_id', expenseId),
+  ]);
 
-  if (!expense) return null;
+  if (!expenseRes.data) return null;
+  const expense = expenseRes.data;
+  const splits = splitsRes.data ?? [];
 
-  const { data: splits } = await supabase
-    .from('expense_splits')
-    .select('user_id, amount')
-    .eq('expense_id', expenseId);
-
-  const userIds = (splits ?? []).map((s) => s.user_id);
+  const userIds = splits.map((s) => s.user_id);
   const { data: profiles } = userIds.length
     ? await supabase.from('profiles').select('id, full_name, email, avatar_url').in('id', userIds)
     : { data: [] };
@@ -228,8 +270,8 @@ export async function getExpenseDetail(expenseId: string): Promise<ExpenseDetail
     receipt_url: expense.receipt_url,
     payer_id: expense.payer_id,
     group_id: expense.group_id,
-    is_settlement: (expense as any).is_settlement ?? false,
-    splits: (splits ?? []).map((s) => {
+    is_settlement: expense.is_settlement,
+    splits: splits.map((s) => {
       const p = profiles?.find((pr) => pr.id === s.user_id);
       return {
         user_id: s.user_id,
@@ -241,7 +283,7 @@ export async function getExpenseDetail(expenseId: string): Promise<ExpenseDetail
   };
 }
 
-/** Delete an expense and its splits. */
+/** Delete an expense — RLS ensures only the payer can delete. */
 export async function deleteExpense(expenseId: string): Promise<void> {
   const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
   if (error) throw error;
@@ -256,7 +298,12 @@ export async function recordSettlement(params: {
 }): Promise<void> {
   const { payerId, receiverId, amount, note } = params;
 
-  // Create an expense with a special settlement category
+  // Verify the current session user is involved in this settlement
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user || (user.id !== payerId && user.id !== receiverId)) {
+    throw new Error('Unauthorized: you are not part of this settlement.');
+  }
+
   const { data: expense, error: expenseError } = await supabase
     .from('expenses')
     .insert({
@@ -268,13 +315,13 @@ export async function recordSettlement(params: {
       currency_code: 'USD',
       group_id: null,
       is_settlement: true,
+      recurrence: 'never',
     } as any)
     .select()
     .single();
 
   if (expenseError) throw expenseError;
 
-  // Payer owes 0, receiver gets credited full amount
   const { error: splitsError } = await supabase.from('expense_splits').insert([
     { expense_id: expense.id, user_id: payerId, amount: 0 },
     { expense_id: expense.id, user_id: receiverId, amount },
