@@ -1,6 +1,8 @@
+import AnimatedPressable from '@/components/AnimatedPressable';
 import { useAuth } from '@/hooks/useAuth';
 import type { GroupExpense, GroupMemberWithProfile } from '@/services/groups';
-import { getGroupExpenses, getGroupMembers, leaveGroup } from '@/services/groups';
+import { getGroupExpenses, getGroupMembers, getGroupNetPositions, leaveGroup } from '@/services/groups';
+import { categoryIcon } from '@/utils/categories';
 import { rowsToCsv, shareCsv } from '@/utils/exportCsv';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -16,45 +18,28 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-
-const CATEGORY_ICONS: Record<string, string> = {
-  food_drink: 'food-fork-drink',
-  entertainment: 'movie-open',
-  home: 'home',
-  transportation: 'car',
-  utilities: 'lightning-bolt',
-  life: 'shopping',
-  uncategorized: 'receipt',
-};
+import Animated, { FadeIn, FadeInDown, Layout } from 'react-native-reanimated';
 
 type Tab = 'expenses' | 'balances';
 type SimplifiedDebt = { from: string; fromName: string; to: string; toName: string; amount: number };
 
-function simplifyDebts(members: GroupMemberWithProfile[], currentUserId: string): SimplifiedDebt[] {
-  // Build net position map: positive = owed to this person, negative = owes others
-  const netMap: Record<string, { name: string; net: number }> = {};
-  for (const m of members) {
-    const name = m.profile?.full_name ?? m.profile?.email ?? 'Unknown';
-    netMap[m.user_id] = { name, net: 0 };
-  }
-  // Pairwise balances from members' perspective relative to current user
-  // Instead, compute from the balance field (balance > 0 means they owe current user)
-  for (const m of members) {
-    if (m.user_id === currentUserId) continue;
-    netMap[currentUserId].net += m.balance > 0 ? m.balance : 0;
-    netMap[currentUserId].net -= m.balance < 0 ? Math.abs(m.balance) : 0;
-    netMap[m.user_id].net += m.balance < 0 ? Math.abs(m.balance) : 0;
-    netMap[m.user_id].net -= m.balance > 0 ? m.balance : 0;
-  }
-
-  const givers = Object.entries(netMap)
-    .filter(([, v]) => v.net > 0.005)
-    .map(([id, v]) => ({ id, name: v.name, amount: v.net }))
+/**
+ * Simplify a group's debts using a greedy algorithm on absolute net positions.
+ * Net position per user is computed independently from raw expenses (paid - owed).
+ * Givers (net > 0) are people owed money; receivers (net < 0) owe money.
+ */
+function simplifyDebts(
+  netPositions: Record<string, number>,
+  nameLookup: Record<string, string>
+): SimplifiedDebt[] {
+  const givers = Object.entries(netPositions)
+    .filter(([, v]) => v > 0.005)
+    .map(([id, v]) => ({ id, name: nameLookup[id] ?? 'Unknown', amount: v }))
     .sort((a, b) => b.amount - a.amount);
 
-  const receivers = Object.entries(netMap)
-    .filter(([, v]) => v.net < -0.005)
-    .map(([id, v]) => ({ id, name: v.name, amount: -v.net }))
+  const receivers = Object.entries(netPositions)
+    .filter(([, v]) => v < -0.005)
+    .map(([id, v]) => ({ id, name: nameLookup[id] ?? 'Unknown', amount: -v }))
     .sort((a, b) => b.amount - a.amount);
 
   const result: SimplifiedDebt[] = [];
@@ -65,7 +50,13 @@ function simplifyDebts(members: GroupMemberWithProfile[], currentUserId: string)
     const receiver = receivers[ri];
     const transfer = Math.min(giver.amount, receiver.amount);
     if (transfer > 0.005) {
-      result.push({ from: receiver.id, fromName: receiver.name, to: giver.id, toName: giver.name, amount: transfer });
+      result.push({
+        from: receiver.id,
+        fromName: receiver.name,
+        to: giver.id,
+        toName: giver.name,
+        amount: transfer,
+      });
     }
     giver.amount -= transfer;
     receiver.amount -= transfer;
@@ -82,6 +73,7 @@ export default function GroupDetailScreen() {
   const [tab, setTab] = useState<Tab>('expenses');
   const [expenses, setExpenses] = useState<GroupExpense[]>([]);
   const [members, setMembers] = useState<GroupMemberWithProfile[]>([]);
+  const [netPositions, setNetPositions] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [simplify, setSimplify] = useState(false);
@@ -89,12 +81,14 @@ export default function GroupDetailScreen() {
   const load = useCallback(async () => {
     if (!user || !id) return;
     try {
-      const [exps, mems] = await Promise.all([
+      const [exps, mems, net] = await Promise.all([
         getGroupExpenses(id, user.id),
         getGroupMembers(id, user.id),
+        getGroupNetPositions(id),
       ]);
       setExpenses(exps);
       setMembers(mems);
+      setNetPositions(net);
     } catch (err) {
       console.error('Error loading group:', err);
     }
@@ -132,13 +126,13 @@ export default function GroupDetailScreen() {
   }
 
   function renderExpense({ item }: { item: GroupExpense }) {
-    const icon = CATEGORY_ICONS[item.category ?? 'uncategorized'] ?? 'receipt';
+    const icon = categoryIcon(item.category);
     const dateStr = item.date
       ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
       : '';
 
     return (
-      <TouchableOpacity
+      <AnimatedPressable
         style={styles.expenseRow}
         onPress={() => router.push({ pathname: '/expense/[id]', params: { id: item.id } })}
       >
@@ -159,7 +153,7 @@ export default function GroupDetailScreen() {
               : `you owe $${item.my_share.toFixed(2)}`}
           </Text>
         </View>
-      </TouchableOpacity>
+      </AnimatedPressable>
     );
   }
 
@@ -275,17 +269,21 @@ export default function GroupDetailScreen() {
         ) : tab === 'expenses' ? (
           <FlatList
             data={expenses}
-            renderItem={renderExpense}
+            renderItem={({ item, index }) => (
+              <Animated.View entering={FadeInDown.duration(260).delay(index * 25)}>
+                {renderExpense({ item })}
+              </Animated.View>
+            )}
             keyExtractor={(item) => item.id}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             contentContainerStyle={expenses.length === 0 ? { flex: 1 } : { paddingBottom: 100 }}
             ListEmptyComponent={
-              <View style={styles.emptyState}>
+              <Animated.View entering={FadeIn.duration(400)} style={styles.emptyState}>
                 <Ionicons name="receipt-outline" size={64} color="#d1d5db" />
                 <Text style={styles.emptyTitle}>No expenses yet</Text>
                 <Text style={styles.emptySubtitle}>Tap + to add the first group expense</Text>
-              </View>
+              </Animated.View>
             }
           />
         ) : (
@@ -304,7 +302,11 @@ export default function GroupDetailScreen() {
 
             {simplify ? (
               (() => {
-                const debts = simplifyDebts(members, user?.id ?? '');
+                const nameLookup: Record<string, string> = {};
+                for (const m of members) {
+                  nameLookup[m.user_id] = m.profile?.full_name ?? m.profile?.email ?? 'Unknown';
+                }
+                const debts = simplifyDebts(netPositions, nameLookup);
                 if (debts.length === 0) {
                   return (
                     <View style={styles.emptyState}>
@@ -361,17 +363,23 @@ export default function GroupDetailScreen() {
         )}
 
         {/* FAB */}
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() =>
-            router.push({
-              pathname: '/add-expense',
-              params: { groupId: id, groupName: name },
-            })
-          }
+        <Animated.View
+          entering={FadeIn.duration(400).delay(200)}
+          style={styles.fabWrapper}
         >
-          <Ionicons name="add" size={28} color="#fff" />
-        </TouchableOpacity>
+          <AnimatedPressable
+            scaleTo={0.88}
+            style={styles.fab}
+            onPress={() =>
+              router.push({
+                pathname: '/add-expense',
+                params: { groupId: id, groupName: name },
+              })
+            }
+          >
+            <Ionicons name="add" size={28} color="#fff" />
+          </AnimatedPressable>
+        </Animated.View>
       </View>
     </>
   );
@@ -480,10 +488,12 @@ const styles = StyleSheet.create({
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
   emptyTitle: { fontSize: 20, fontWeight: '700', color: '#111', marginTop: 20, marginBottom: 8 },
   emptySubtitle: { fontSize: 14, color: '#6b7280', textAlign: 'center' },
-  fab: {
+  fabWrapper: {
     position: 'absolute',
     bottom: 24,
     right: 24,
+  },
+  fab: {
     width: 56,
     height: 56,
     borderRadius: 28,

@@ -1,4 +1,7 @@
+import AnimatedPressable from '@/components/AnimatedPressable';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
+import { categoryIcon } from '@/utils/categories';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Stack, router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
@@ -11,7 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { supabase } from '@/lib/supabase';
+import Animated, { FadeInUp } from 'react-native-reanimated';
 
 type ActivityItem = {
   id: string;
@@ -26,16 +29,6 @@ type ActivityItem = {
   category: string | null;
   my_share: number;
   i_paid: boolean;
-};
-
-const CATEGORY_ICONS: Record<string, string> = {
-  food_drink: 'food-fork-drink',
-  entertainment: 'movie-open',
-  home: 'home',
-  transportation: 'car',
-  utilities: 'lightning-bolt',
-  life: 'shopping',
-  uncategorized: 'receipt',
 };
 
 function groupByDate(items: ActivityItem[]): { title: string; data: ActivityItem[] }[] {
@@ -141,9 +134,7 @@ export default function ActivityScreen() {
   }
 
   function renderItem({ item }: { item: ActivityItem }) {
-    const icon = item.type === 'settlement'
-      ? 'cash'
-      : CATEGORY_ICONS[item.category ?? 'uncategorized'] ?? 'receipt';
+    const icon = item.type === 'settlement' ? 'cash' : categoryIcon(item.category);
 
     const dateStr = new Date(item.date).toLocaleDateString('en-US', {
       month: 'short',
@@ -156,7 +147,7 @@ export default function ActivityScreen() {
       : `-$${item.my_share.toFixed(2)}`;
 
     return (
-      <TouchableOpacity
+      <AnimatedPressable
         style={styles.itemRow}
         onPress={() => router.push({ pathname: '/expense/[id]', params: { id: item.id } })}
       >
@@ -175,7 +166,7 @@ export default function ActivityScreen() {
           <Text style={[styles.itemAmount, { color: amountColor }]}>{amountLabel}</Text>
           <Text style={styles.itemTotal}>${item.amount.toFixed(2)} total</Text>
         </View>
-      </TouchableOpacity>
+      </AnimatedPressable>
     );
   }
 
@@ -222,15 +213,21 @@ export default function ActivityScreen() {
             item.type === 'header' ? `header-${item.title}` : `item-${item.data.id}`
           }
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          renderItem={({ item }) => {
+          renderItem={({ item, index }) => {
             if (item.type === 'header') {
               return (
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionHeaderText}>{item.title}</Text>
-                </View>
+                <Animated.View entering={FadeInUp.duration(280).delay(index * 15)}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionHeaderText}>{item.title}</Text>
+                  </View>
+                </Animated.View>
               );
             }
-            return renderItem({ item: item.data });
+            return (
+              <Animated.View entering={FadeInUp.duration(260).delay(index * 15)}>
+                {renderItem({ item: item.data })}
+              </Animated.View>
+            );
           }}
           ItemSeparatorComponent={({ leadingItem }) =>
             leadingItem?.type === 'item' ? <View style={styles.separator} /> : null

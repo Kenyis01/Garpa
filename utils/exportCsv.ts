@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 export function rowsToCsv(headers: string[], rows: (string | number | null | undefined)[][]): string {

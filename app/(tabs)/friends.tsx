@@ -1,3 +1,4 @@
+import AnimatedPressable from '@/components/AnimatedPressable';
 import OverallBalanceBanner from '@/components/OverallBalanceBanner';
 import { ScreenWrapper } from '@/components/ui/ScreenWrapper';
 import Colors from '@/constants/Colors';
@@ -14,6 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Animated, { FadeInDown, Layout } from 'react-native-reanimated';
 
 type Filter = 'all' | 'owe' | 'owed';
 
@@ -27,33 +29,38 @@ export default function FriendsScreen() {
     return friends;
   }, [friends, filter]);
 
-  const renderFriend = ({ item }: { item: FriendWithBalance }) => (
-    <TouchableOpacity
-      style={styles.friendRow}
-      onPress={() =>
-        router.push({
-          pathname: '/(tabs)/friends/[id]',
-          params: { id: item.id, name: item.name, friendshipId: item.friendshipId },
-        })
-      }
+  const renderFriend = ({ item, index }: { item: FriendWithBalance; index: number }) => (
+    <Animated.View
+      entering={FadeInDown.duration(280).delay(index * 30).springify().damping(16)}
+      layout={Layout.springify()}
     >
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{(item.name || '?').charAt(0).toUpperCase()}</Text>
-      </View>
-      <View style={styles.friendInfo}>
-        <Text style={styles.friendName}>{item.name}</Text>
-        {item.balance === 0 ? (
-          <Text style={styles.settledText}>settled up</Text>
-        ) : (
-          <Text style={[styles.balanceText, { color: item.balance > 0 ? Colors.brand.primary : Colors.brand.orange }]}>
-            {item.balance > 0
-              ? `owes you $${item.balance.toFixed(2)}`
-              : `you owe $${Math.abs(item.balance).toFixed(2)}`}
-          </Text>
-        )}
-      </View>
-      <Ionicons name="chevron-forward" size={16} color="#ccc" />
-    </TouchableOpacity>
+      <AnimatedPressable
+        style={styles.friendRow}
+        onPress={() =>
+          router.push({
+            pathname: '/(tabs)/friends/[id]',
+            params: { id: item.id, name: item.name, friendshipId: item.friendshipId },
+          })
+        }
+      >
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{(item.name || '?').charAt(0).toUpperCase()}</Text>
+        </View>
+        <View style={styles.friendInfo}>
+          <Text style={styles.friendName}>{item.name}</Text>
+          {item.balance === 0 ? (
+            <Text style={styles.settledText}>settled up</Text>
+          ) : (
+            <Text style={[styles.balanceText, { color: item.balance > 0 ? Colors.brand.primary : Colors.brand.orange }]}>
+              {item.balance > 0
+                ? `owes you $${item.balance.toFixed(2)}`
+                : `you owe $${Math.abs(item.balance).toFixed(2)}`}
+            </Text>
+          )}
+        </View>
+        <Ionicons name="chevron-forward" size={16} color="#ccc" />
+      </AnimatedPressable>
+    </Animated.View>
   );
 
   return (
@@ -71,15 +78,16 @@ export default function FriendsScreen() {
 
       <View style={styles.filterRow}>
         {(['all', 'owed', 'owe'] as Filter[]).map((f) => (
-          <TouchableOpacity
+          <AnimatedPressable
             key={f}
+            scaleTo={0.92}
             style={[styles.filterChip, filter === f && styles.filterChipActive]}
             onPress={() => setFilter(f)}
           >
             <Text style={[styles.filterChipText, filter === f && styles.filterChipTextActive]}>
               {f === 'all' ? 'All' : f === 'owed' ? 'You are owed' : 'You owe'}
             </Text>
-          </TouchableOpacity>
+          </AnimatedPressable>
         ))}
       </View>
 

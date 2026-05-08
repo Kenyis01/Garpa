@@ -66,6 +66,33 @@ export async function getUserGroups(userId: string): Promise<GroupWithMeta[]> {
   }));
 }
 
+/** Compute net position per user for a whole group (positive = owed money, negative = owes money). */
+export async function getGroupNetPositions(groupId: string): Promise<Record<string, number>> {
+  const { data: expenses } = await supabase
+    .from('expenses')
+    .select('id, payer_id, amount')
+    .eq('group_id', groupId);
+
+  if (!expenses?.length) return {};
+
+  const expenseIds = expenses.map((e) => e.id);
+  const { data: splits } = await supabase
+    .from('expense_splits')
+    .select('expense_id, user_id, amount')
+    .in('expense_id', expenseIds);
+
+  if (!splits?.length) return {};
+
+  const net: Record<string, number> = {};
+  for (const e of expenses) {
+    net[e.payer_id] = (net[e.payer_id] ?? 0) + e.amount;
+  }
+  for (const s of splits) {
+    net[s.user_id] = (net[s.user_id] ?? 0) - s.amount;
+  }
+  return net;
+}
+
 /** Calculate net balance for a user in a group. */
 export async function calcGroupBalance(userId: string, groupId: string): Promise<number> {
   const { data: splits } = await supabase

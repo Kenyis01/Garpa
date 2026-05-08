@@ -36,9 +36,8 @@ export async function createExpenseBetweenFriends(params: {
         date: date || new Date().toISOString().split('T')[0],
         currency_code: 'USD',
         group_id: null,
-        notes: notes || null,
-        ...(recurrence ? { recurrence } : {}),
-      } as any)
+        notes: recurrence ? `[repeats:${recurrence}]${notes ? ' ' + notes : ''}` : notes || null,
+      })
       .select()
       .single();
 

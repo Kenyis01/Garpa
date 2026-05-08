@@ -1,6 +1,7 @@
 import Colors from '@/constants/Colors';
 import { useAuth } from '@/hooks/useAuth';
 import { deleteExpense, getExpenseDetail, type ExpenseDetail } from '@/services/friends';
+import { categoryIcon } from '@/utils/categories';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -13,25 +14,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-
-const CATEGORY_ICONS: Record<string, string> = {
-  food: 'food-fork-drink',
-  groceries: 'cart',
-  transport: 'car',
-  entertainment: 'ticket',
-  utilities: 'lightning-bolt',
-  rent: 'home',
-  healthcare: 'medical-bag',
-  shopping: 'shopping',
-  travel: 'airplane',
-  uncategorized: 'dots-horizontal',
-};
-
-function categoryIcon(cat: string | null): string {
-  if (!cat) return 'dots-horizontal';
-  const key = Object.keys(CATEGORY_ICONS).find((k) => cat.toLowerCase().includes(k));
-  return key ? CATEGORY_ICONS[key] : 'dots-horizontal';
-}
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '';

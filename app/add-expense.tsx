@@ -1,3 +1,4 @@
+import AnimatedPressable from '@/components/AnimatedPressable';
 import { useFriends } from '@/contexts/FriendsContext';
 import { useAuth } from '@/hooks/useAuth';
 import { createExpenseBetweenFriends } from '@/lib/expenses';
@@ -261,34 +262,35 @@ export default function AddExpenseScreen() {
         {/* Options row */}
         <View style={styles.optionsRow}>
           {/* Category */}
-          <TouchableOpacity style={styles.optionBtn} onPress={() => { setSelectedParent(null); setShowCategoryModal(true); }}>
+          <AnimatedPressable scaleTo={0.94} style={styles.optionBtn} onPress={() => { setSelectedParent(null); setShowCategoryModal(true); }}>
             <MaterialCommunityIcons name={selectedGroup.icon as any} size={18} color="#555" />
             <Text style={styles.optionBtnText}>{categoryLabel}</Text>
-          </TouchableOpacity>
+          </AnimatedPressable>
 
           {/* Date */}
-          <TouchableOpacity style={styles.optionBtn} onPress={() => setShowDatePicker(true)}>
+          <AnimatedPressable scaleTo={0.94} style={styles.optionBtn} onPress={() => setShowDatePicker(true)}>
             <Ionicons name="calendar-outline" size={18} color="#555" />
             <Text style={styles.optionBtnText}>
               {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
             </Text>
-          </TouchableOpacity>
+          </AnimatedPressable>
 
           {/* Recurrence */}
-          <TouchableOpacity style={styles.optionBtn} onPress={() => setShowRecurrenceModal(true)}>
+          <AnimatedPressable scaleTo={0.94} style={styles.optionBtn} onPress={() => setShowRecurrenceModal(true)}>
             <Ionicons name="repeat" size={18} color={recurrence !== 'never' ? '#5BC5A7' : '#555'} />
             <Text style={[styles.optionBtnText, recurrence !== 'never' && { color: '#5BC5A7' }]}>
               {RECURRENCE_LABELS[recurrence]}
             </Text>
-          </TouchableOpacity>
+          </AnimatedPressable>
         </View>
 
         {/* Split options */}
         <View style={styles.splitSection}>
           <Text style={styles.splitTitle}>How to split</Text>
           {(['equal', 'full_payer', 'full_friend'] as SplitType[]).map((type) => (
-            <TouchableOpacity
+            <AnimatedPressable
               key={type}
+              scaleTo={0.97}
               style={[styles.splitOption, splitType === type && styles.splitOptionSelected]}
               onPress={() => setSplitType(type)}
             >
@@ -315,7 +317,7 @@ export default function AddExpenseScreen() {
                   </Text>
                 )}
               </View>
-            </TouchableOpacity>
+            </AnimatedPressable>
           ))}
         </View>
 

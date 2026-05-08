@@ -79,16 +79,20 @@ function filterByPeriod(expenses: ExpenseRow[], period: Period): ExpenseRow[] {
 }
 
 function getMonthlyData(expenses: ExpenseRow[]): { label: string; total: number }[] {
-  const map: Record<string, number> = {};
+  const map: Record<string, { sortKey: number; total: number }> = {};
   for (const e of expenses) {
     if (!e.date) continue;
     const d = new Date(e.date);
     const key = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-    map[key] = (map[key] ?? 0) + e.amount;
+    if (!map[key]) {
+      map[key] = { sortKey: d.getFullYear() * 12 + d.getMonth(), total: 0 };
+    }
+    map[key].total += e.amount;
   }
   return Object.entries(map)
-    .sort(([a], [b]) => new Date('1 ' + a).getTime() - new Date('1 ' + b).getTime())
-    .slice(-6);
+    .sort(([, a], [, b]) => a.sortKey - b.sortKey)
+    .slice(-6)
+    .map(([label, v]) => ({ label, total: v.total }));
 }
 
 export default function SpendingScreen() {
@@ -101,16 +105,15 @@ export default function SpendingScreen() {
     if (!user) return;
     supabase
       .from('expense_splits')
-      .select('amount, expense:expenses(amount, category, date, payer_id)')
+      .select('amount, expense:expenses(category, date, is_settlement)')
       .eq('user_id', user.id)
       .then(({ data }) => {
         const rows: ExpenseRow[] = (data ?? [])
-          .map((s: any) => s.expense)
-          .filter((e: any) => e && e.payer_id !== user.id)
-          .map((e: any) => ({
-            amount: e.amount,
-            category: e.category,
-            date: e.date,
+          .filter((s: any) => s.expense && !s.expense.is_settlement && s.amount > 0)
+          .map((s: any) => ({
+            amount: s.amount,
+            category: s.expense.category,
+            date: s.expense.date,
           }));
         setExpenses(rows);
       })

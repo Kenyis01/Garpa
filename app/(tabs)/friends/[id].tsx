@@ -1,9 +1,12 @@
+import AnimatedAmount from '@/components/AnimatedAmount';
+import AnimatedPressable from '@/components/AnimatedPressable';
 import { useAuth } from '@/hooks/useAuth';
 import {
   calcBalance,
   getExpensesWithFriend,
   removeFriendship,
 } from '@/services/friends';
+import { categoryIcon } from '@/utils/categories';
 import { rowsToCsv, shareCsv } from '@/utils/exportCsv';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
@@ -18,6 +21,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 type ExpenseItem = {
   id: string;
@@ -28,16 +32,6 @@ type ExpenseItem = {
   category: string | null;
   myShare: number;
   friendShare: number;
-};
-
-const CATEGORY_ICONS: Record<string, string> = {
-  food_drink: 'food-fork-drink',
-  entertainment: 'movie-open',
-  home: 'home',
-  transportation: 'car',
-  utilities: 'lightning-bolt',
-  life: 'shopping',
-  uncategorized: 'receipt',
 };
 
 export default function FriendDetailScreen() {
@@ -54,14 +48,16 @@ export default function FriendDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const sections = React.useMemo(() => {
-    const map: Record<string, ExpenseItem[]> = {};
+    const map: Record<string, { sortKey: number; items: ExpenseItem[] }> = {};
     for (const e of expenses) {
       const d = e.date ? new Date(e.date) : new Date(0);
       const key = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-      if (!map[key]) map[key] = [];
-      map[key].push(e);
+      if (!map[key]) map[key] = { sortKey: d.getFullYear() * 12 + d.getMonth(), items: [] };
+      map[key].items.push(e);
     }
-    return Object.entries(map).map(([title, data]) => ({ title, data }));
+    return Object.entries(map)
+      .sort(([, a], [, b]) => b.sortKey - a.sortKey)
+      .map(([title, v]) => ({ title, data: v.items }));
   }, [expenses]);
 
   const load = useCallback(async () => {
@@ -97,32 +93,34 @@ export default function FriendDetailScreen() {
       ? `You owe ${name}`
       : 'Settled up';
 
-  function renderExpense({ item }: { item: ExpenseItem }) {
+  function renderExpense({ item, index }: { item: ExpenseItem; index: number }) {
     const iPaid = item.payer_id === user?.id;
-    const icon = CATEGORY_ICONS[item.category ?? 'uncategorized'] ?? 'receipt';
+    const icon = categoryIcon(item.category);
     const dateStr = item.date
       ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       : '';
 
     return (
-      <TouchableOpacity
-        style={styles.expenseRow}
-        onPress={() => router.push({ pathname: '/expense/[id]', params: { id: item.id } })}
-      >
-        <View style={styles.expenseIcon}>
-          <MaterialCommunityIcons name={icon as any} size={22} color="#6b7280" />
-        </View>
-        <View style={styles.expenseInfo}>
-          <Text style={styles.expenseDescription}>{item.description}</Text>
-          <Text style={styles.expenseDate}>{dateStr}</Text>
-        </View>
-        <View style={styles.expenseRight}>
-          <Text style={styles.expenseTotal}>${item.amount.toFixed(2)}</Text>
-          <Text style={[styles.expenseShare, { color: iPaid ? '#10b981' : '#6b7280' }]}>
-            {iPaid ? `you lent $${item.friendShare.toFixed(2)}` : `you borrowed $${item.myShare.toFixed(2)}`}
-          </Text>
-        </View>
-      </TouchableOpacity>
+      <Animated.View entering={FadeInDown.duration(260).delay(index * 25)}>
+        <AnimatedPressable
+          style={styles.expenseRow}
+          onPress={() => router.push({ pathname: '/expense/[id]', params: { id: item.id } })}
+        >
+          <View style={styles.expenseIcon}>
+            <MaterialCommunityIcons name={icon as any} size={22} color="#6b7280" />
+          </View>
+          <View style={styles.expenseInfo}>
+            <Text style={styles.expenseDescription}>{item.description}</Text>
+            <Text style={styles.expenseDate}>{dateStr}</Text>
+          </View>
+          <View style={styles.expenseRight}>
+            <Text style={styles.expenseTotal}>${item.amount.toFixed(2)}</Text>
+            <Text style={[styles.expenseShare, { color: iPaid ? '#10b981' : '#6b7280' }]}>
+              {iPaid ? `you lent $${item.friendShare.toFixed(2)}` : `you borrowed $${item.myShare.toFixed(2)}`}
+            </Text>
+          </View>
+        </AnimatedPressable>
+      </Animated.View>
     );
   }
 
@@ -206,15 +204,16 @@ export default function FriendDetailScreen() {
 
       <View style={styles.container}>
         {/* Balance Card */}
-        <View style={styles.balanceCard}>
+        <Animated.View entering={FadeIn.duration(400)} style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>{oweText}</Text>
           {!isSettled && (
-            <Text style={[styles.balanceAmount, { color: balance > 0 ? '#10b981' : '#ef4444' }]}>
-              ${Math.abs(balance).toFixed(2)}
-            </Text>
+            <AnimatedAmount
+              value={Math.abs(balance)}
+              style={[styles.balanceAmount, { color: balance > 0 ? '#10b981' : '#ef4444' }]}
+            />
           )}
           {!isSettled && (
-            <TouchableOpacity
+            <AnimatedPressable
               style={styles.settleButton}
               onPress={() =>
                 router.push({
@@ -228,9 +227,9 @@ export default function FriendDetailScreen() {
               }
             >
               <Text style={styles.settleButtonText}>Settle up</Text>
-            </TouchableOpacity>
+            </AnimatedPressable>
           )}
-        </View>
+        </Animated.View>
 
         {/* Expenses */}
         {loading ? (
@@ -263,17 +262,23 @@ export default function FriendDetailScreen() {
         )}
 
         {/* FAB */}
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() =>
-            router.push({
-              pathname: '/add-expense',
-              params: { friendId: id, friendName: name },
-            })
-          }
+        <Animated.View
+          entering={FadeIn.duration(400).delay(200)}
+          style={styles.fabWrapper}
         >
-          <Ionicons name="add" size={28} color="#fff" />
-        </TouchableOpacity>
+          <AnimatedPressable
+            scaleTo={0.88}
+            style={styles.fab}
+            onPress={() =>
+              router.push({
+                pathname: '/add-expense',
+                params: { friendId: id, friendName: name },
+              })
+            }
+          >
+            <Ionicons name="add" size={28} color="#fff" />
+          </AnimatedPressable>
+        </Animated.View>
       </View>
     </>
   );
@@ -332,10 +337,12 @@ const styles = StyleSheet.create({
   emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
   emptyTitle: { fontSize: 20, fontWeight: '700', color: '#111827', marginTop: 20, marginBottom: 8 },
   emptySubtitle: { fontSize: 15, color: '#6b7280', textAlign: 'center', lineHeight: 22 },
-  fab: {
+  fabWrapper: {
     position: 'absolute',
     bottom: 24,
     right: 24,
+  },
+  fab: {
     width: 56,
     height: 56,
     borderRadius: 28,
