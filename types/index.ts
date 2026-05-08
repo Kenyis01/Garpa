@@ -8,7 +8,8 @@ export type {
   FriendshipStatus,
   Group,
   GroupMember,
+  GroupRole,
   Json,
   Profile,
-  Settlement,
+  Recurrence,
 } from './database';

@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 
 import { useAuth } from '@/hooks';
-import { signInSchema } from '@/lib/validation';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginScreen() {
   const { loading, signInWithPassword, signUpWithPassword } = useAuth();
@@ -24,13 +25,16 @@ export default function LoginScreen() {
   const isBusy = loading || submitting !== null;
 
   function validate(): { email: string; password: string } | null {
-    const parsed = signInSchema.safeParse({ email, password });
-    if (!parsed.success) {
-      const message = parsed.error.issues[0]?.message ?? 'Datos inválidos';
-      Alert.alert('Datos inválidos', message);
+    const trimmed = email.trim().toLowerCase();
+    if (!EMAIL_RE.test(trimmed)) {
+      Alert.alert('Datos inválidos', 'Email inválido');
       return null;
     }
-    return parsed.data;
+    if (password.length < 8) {
+      Alert.alert('Datos inválidos', 'La contraseña debe tener al menos 8 caracteres');
+      return null;
+    }
+    return { email: trimmed, password };
   }
 
   async function handleLogin() {

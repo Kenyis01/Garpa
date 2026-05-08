@@ -1,6 +1,6 @@
 /**
  * Tipos de la base de datos para el proyecto Garpa.
- * Mantener sincronizado con las migraciones en supabase/migrations.
+ * Mantener sincronizado con el esquema Supabase.
  */
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
@@ -16,54 +16,23 @@ export type ExpenseCategory =
 
 export type FriendshipStatus = 'pending' | 'accepted' | 'blocked';
 
+export type Recurrence = 'never' | 'weekly' | 'biweekly' | 'monthly' | 'yearly';
+
+export type GroupRole = 'admin' | 'member';
+
 export type Profile = {
   id: string;
-  username: string | null;
   full_name: string | null;
-  avatar_url: string | null;
-  website: string | null;
   email: string | null;
+  avatar_url: string | null;
+  username: string | null;
+  website: string | null;
   phone: string | null;
-  currency: string | null;
+  currency: string;
+  language: string;
   timezone: string | null;
-  language: string | null;
-  privacy_searchable: boolean | null;
+  privacy_searchable: boolean;
   updated_at: string | null;
-};
-
-export type Group = {
-  id: string;
-  name: string;
-  description: string | null;
-  created_by: string;
-  created_at: string;
-};
-
-export type GroupMember = {
-  group_id: string;
-  user_id: string;
-  created_at: string;
-};
-
-export type Expense = {
-  id: string;
-  group_id: string | null;
-  payer_id: string;
-  amount: number;
-  description: string;
-  created_at: string;
-  category: ExpenseCategory | null;
-  currency_code: string | null;
-  date: string | null;
-  receipt_url: string | null;
-  notes: string | null;
-};
-
-export type ExpenseSplit = {
-  id: string;
-  expense_id: string;
-  user_id: string;
-  amount: number;
   created_at: string;
 };
 
@@ -75,13 +44,44 @@ export type Friendship = {
   created_at: string;
 };
 
-export type Settlement = {
+export type Group = {
   id: string;
-  payer_id: string;
-  payee_id: string;
+  name: string;
+  description: string | null;
+  type: string | null;
+  created_by: string;
+  created_at: string;
+};
+
+export type GroupMember = {
+  id: string;
+  group_id: string;
+  user_id: string;
+  role: GroupRole;
+  created_at: string;
+};
+
+export type Expense = {
+  id: string;
+  description: string;
   amount: number;
   currency_code: string;
-  note: string | null;
+  date: string | null;
+  category: ExpenseCategory | string | null;
+  notes: string | null;
+  receipt_url: string | null;
+  recurrence: Recurrence;
+  payer_id: string;
+  group_id: string | null;
+  is_settlement: boolean;
+  created_at: string;
+};
+
+export type ExpenseSplit = {
+  id: string;
+  expense_id: string;
+  user_id: string;
+  amount: number;
   created_at: string;
 };
 
@@ -96,61 +96,42 @@ export type Database = {
       profiles: {
         Row: Profile;
         Insert: Partial<Profile> & { id: string };
-        Update: Partial<Profile>;
-        Relationships: [];
-      };
-      groups: {
-        Row: Group;
-        Insert: Omit<Group, 'id' | 'created_at'>;
-        Update: Partial<Omit<Group, 'id'>>;
-        Relationships: [];
-      };
-      group_members: {
-        Row: GroupMember;
-        Insert: GroupMember;
-        Update: Partial<GroupMember>;
-        Relationships: [];
-      };
-      expenses: {
-        Row: Expense;
-        Insert: Omit<Expense, 'id' | 'created_at'>;
-        Update: Partial<Omit<Expense, 'id'>>;
-        Relationships: [];
-      };
-      expense_splits: {
-        Row: ExpenseSplit;
-        Insert: Omit<ExpenseSplit, 'id' | 'created_at'>;
-        Update: Partial<Omit<ExpenseSplit, 'id'>>;
+        Update: Partial<Omit<Profile, 'id' | 'created_at'>>;
         Relationships: [];
       };
       friendships: {
         Row: Friendship;
         Insert: Omit<Friendship, 'id' | 'created_at'>;
-        Update: Partial<Omit<Friendship, 'id'>>;
+        Update: Partial<Pick<Friendship, 'status'>>;
         Relationships: [];
       };
-      settlements: {
-        Row: Settlement;
-        Insert: Omit<Settlement, 'id' | 'created_at'>;
-        Update: Partial<Omit<Settlement, 'id'>>;
+      groups: {
+        Row: Group;
+        Insert: Omit<Group, 'id' | 'created_at'>;
+        Update: Partial<Pick<Group, 'name' | 'description' | 'type'>>;
+        Relationships: [];
+      };
+      group_members: {
+        Row: GroupMember;
+        Insert: Omit<GroupMember, 'id' | 'created_at'>;
+        Update: Partial<Pick<GroupMember, 'role'>>;
+        Relationships: [];
+      };
+      expenses: {
+        Row: Expense;
+        Insert: Omit<Expense, 'id' | 'created_at'>;
+        Update: Partial<Omit<Expense, 'id' | 'created_at' | 'payer_id'>>;
+        Relationships: [];
+      };
+      expense_splits: {
+        Row: ExpenseSplit;
+        Insert: Omit<ExpenseSplit, 'id' | 'created_at'>;
+        Update: Partial<Pick<ExpenseSplit, 'amount'>>;
         Relationships: [];
       };
     };
     Views: { [_ in never]: never };
-    Functions: {
-      create_expense_with_splits: {
-        Args: {
-          p_payer_id: string;
-          p_friend_id: string;
-          p_amount: number;
-          p_description: string;
-          p_category: ExpenseCategory;
-          p_currency_code: string;
-          p_date: string;
-        };
-        Returns: Expense;
-      };
-    };
+    Functions: { [_ in never]: never };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
   };

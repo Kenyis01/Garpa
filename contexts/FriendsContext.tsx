@@ -1,97 +1,73 @@
-import { randomUUID } from 'expo-crypto';
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-
-export type LocalExpense = {
-  id: string;
-  description: string;
-  amount: number;
-  date: string;
-  payerId: 'user' | string;
-};
-
-export type Friend = {
-  id: string;
-  name: string;
-  phone: string;
-  email?: string;
-  balance: number;
-  avatar_url?: string;
-  expenses: LocalExpense[];
-};
-
-type ContactInput = Pick<Friend, 'id' | 'name' | 'phone' | 'email'>;
+import { useAuth } from '@/hooks/useAuth';
+import {
+  addFriend,
+  FriendWithBalance,
+  getFriendsWithBalances,
+  removeFriendship,
+} from '@/services/friends';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from 'react';
 
 type FriendsContextValue = {
-  friends: Friend[];
-  addFriends: (contacts: ContactInput[]) => void;
-  removeFriend: (friendId: string) => void;
-  addExpense: (friendId: string, description: string, amount: number) => void;
-  setBalance: (friendId: string, balance: number) => void;
+  friends: FriendWithBalance[];
+  loading: boolean;
+  refreshFriends: () => Promise<void>;
+  addFriendById: (friendId: string) => Promise<void>;
+  removeFriend: (friendshipId: string) => Promise<void>;
 };
 
 const FriendsContext = createContext<FriendsContextValue | undefined>(undefined);
 
 export function FriendsProvider({ children }: { children: ReactNode }) {
-  const [friends, setFriends] = useState<Friend[]>([]);
+  const { user } = useAuth();
+  const [friends, setFriends] = useState<FriendWithBalance[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const addFriends = useCallback((contacts: ContactInput[]) => {
-    setFriends((prev) => {
-      const existingIds = new Set(prev.map((f) => f.id));
-      const newcomers: Friend[] = contacts
-        .filter((c) => !existingIds.has(c.id))
-        .map((c) => ({
-          id: c.id,
-          name: c.name,
-          phone: c.phone,
-          email: c.email,
-          balance: 0,
-          avatar_url: undefined,
-          expenses: [],
-        }));
-      return [...prev, ...newcomers];
-    });
-  }, []);
+  const refreshFriends = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const data = await getFriendsWithBalances(user.id);
+      setFriends(data);
+    } catch (err) {
+      console.error('Error loading friends:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
-  const removeFriend = useCallback((friendId: string) => {
-    setFriends((prev) => prev.filter((f) => f.id !== friendId));
-  }, []);
+  useEffect(() => {
+    refreshFriends();
+  }, [refreshFriends]);
 
-  const addExpense = useCallback((friendId: string, description: string, amount: number) => {
-    setFriends((prev) =>
-      prev.map((f) => {
-        if (f.id !== friendId) return f;
-        const expense: LocalExpense = {
-          id: randomUUID(),
-          description,
-          amount,
-          date: new Date().toISOString(),
-          payerId: 'user',
-        };
-        return {
-          ...f,
-          expenses: [expense, ...f.expenses],
-          balance: f.balance + amount / 2,
-        };
-      }),
-    );
-  }, []);
+  async function addFriendById(friendId: string) {
+    if (!user) return;
+    await addFriend(user.id, friendId);
+    await refreshFriends();
+  }
 
-  const setBalance = useCallback((friendId: string, balance: number) => {
-    setFriends((prev) => prev.map((f) => (f.id === friendId ? { ...f, balance } : f)));
-  }, []);
+  async function removeFriend(friendshipId: string) {
+    await removeFriendship(friendshipId);
+    setFriends((prev) => prev.filter((f) => f.friendshipId !== friendshipId));
+  }
 
-  const value = useMemo<FriendsContextValue>(
-    () => ({ friends, addFriends, removeFriend, addExpense, setBalance }),
-    [friends, addFriends, removeFriend, addExpense, setBalance],
+  return (
+    <FriendsContext.Provider
+      value={{ friends, loading, refreshFriends, addFriendById, removeFriend }}
+    >
+      {children}
+    </FriendsContext.Provider>
   );
-
-  return <FriendsContext.Provider value={value}>{children}</FriendsContext.Provider>;
 }
 
 export function useFriends() {
   const ctx = useContext(FriendsContext);
-  if (!ctx) {
-    throw new Error('useFriends must be used within a FriendsProvider');
-  }
+  if (!ctx) throw new Error('useFriends must be used within a FriendsProvider');
   return ctx;
 }
